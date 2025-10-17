@@ -1,0 +1,56 @@
+======================================================================
+🚀 Finvestor Market Data Fetch Tests
+======================================================================
+
+🧪 Testing Price Data Fetch for AAPL...
+----------------------------------------------------------------------
+✅ SUCCESS: Real data retrieved from [alphavantage] for AAPL
+   Data points: 365
+   Fetched at: 2025-10-09T15:53:49.637365
+   Latest price: $258.06 on 2025-10-08
+
+🧪 Testing Fundamentals Fetch for AAPL...
+----------------------------------------------------------------------
+✅ SUCCESS: Fundamentals retrieved from [finnhub] for AAPL
+   P/E Ratio (TTM): 37.9911
+   Market Cap: $3,829,711,116,722
+   Beta: 1.1087422
+   52-Week High: $260.1
+   52-Week Low: $169.2101
+
+🧪 Testing Intraday Data Fetch for AAPL...
+----------------------------------------------------------------------
+⚠️  WARNING: Intraday data not available for AAPL
+
+🧪 Testing Multiple Symbols...
+----------------------------------------------------------------------
+   ✓ AAPL: 365 points from alphavantage
+   ✓ MSFT: 365 points from alphavantage
+   ✓ GOOGL: 365 points from alphavantage
+
+   Summary: 3/3 symbols succeeded
+
+
+======================================================================
+📊 TEST SUMMARY
+======================================================================
+✅ PASS - Price Data (AAPL)
+✅ PASS - Fundamentals (AAPL)
+❌ FAIL - Intraday (AAPL)
+         Error: Intraday not available
+✅ PASS - Multiple Symbols
+
+Overall: 3/4 tests passed
+======================================================================
+
+📝 Detailed report written to logs/fetch_report.txt
+
+⚠️  FAILURE SUMMARY:
+----------------------------------------------------------------------
+
+❌ Intraday (AAPL)
+   Reason: Intraday not available
+   All API sources failed
+   Timestamp: 2025-10-09T15:54:26.549864
+
+
