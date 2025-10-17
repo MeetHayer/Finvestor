@@ -7,7 +7,7 @@ import logging
 
 from app.db import get_session
 from app.services.market_data import get_market_data_fetcher
-from app.services.benchmark_data import get_all_benchmarks
+from app.services.benchmarks_live import get_all_benchmarks
 
 router = APIRouter(prefix="/api")
 log = logging.getLogger(__name__)

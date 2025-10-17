@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { Plus, Star, Trash2, TrendingUp } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useWatchlists, useCreateWatchlist, useDeleteWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from '../lib/queries';
+import { useWatchlists, useCreateWatchlist, useDeleteWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from '../hooks/useWatchlists';
 import TickerSearch from '../components/TickerSearch';
 
 export default function Watchlists() {

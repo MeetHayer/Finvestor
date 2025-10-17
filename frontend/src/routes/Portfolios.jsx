@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { Plus, Briefcase, Trash2, TrendingUp, Calendar, DollarSign } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { usePortfolios, useCreatePortfolio, useDeletePortfolio, useAddHolding, useRemoveHolding, useTickerSearch } from '../lib/queries';
+import { usePortfolios, useCreatePortfolio, useDeletePortfolio, useAddHolding, useRemoveHolding } from '../hooks/usePortfolios';
+import { useTickerSearch } from '../lib/queries';
 import TickerSearch from '../components/TickerSearch';
 
 // Helper function to calculate portfolio value

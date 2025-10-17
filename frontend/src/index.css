@@ -50,6 +50,219 @@
   transform: translateY(10px);
 }
 
+/* ============================================
+   PIXEL-PERFECT POLISH - ELEVATE THEME
+   Enable by adding data-theme="elevate" to <body>
+   ============================================ */
+
+[data-theme="elevate"] {
+  /* Enhanced Cards */
+  .card {
+    @apply rounded-2xl shadow-lg border border-black/5 backdrop-blur-sm p-6 md:p-8;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.05);
+  }
+
+  /* Enhanced Typography */
+  h1 {
+    @apply text-2xl md:text-3xl font-semibold tracking-tight;
+  }
+
+  h2 {
+    @apply text-xl md:text-2xl font-semibold tracking-tight;
+  }
+
+  /* Tabular numbers for metrics */
+  .metric-value,
+  .price-value,
+  .percent-value,
+  table td {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Enhanced Layout */
+  .dashboard-grid {
+    @apply max-w-6xl mx-auto grid grid-cols-12 gap-6;
+  }
+
+  /* Enhanced Buttons */
+  .btn-primary {
+    @apply focus:ring-2 focus:ring-primary/30 focus:outline-none;
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-0.5px);
+  }
+
+  .btn-secondary {
+    @apply focus:ring-2 focus:ring-gray-300 focus:outline-none;
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .btn-secondary:hover {
+    transform: translateY(-0.5px);
+  }
+
+  /* Enhanced Card Hover (micro-interaction) */
+  .card-hover {
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .card-hover:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Enhanced Loading Skeletons */
+  .skeleton {
+    @apply animate-pulse bg-black/5 rounded-lg;
+  }
+
+  .shimmer {
+    animation-duration: 1.5s;
+  }
+
+  /* Enhanced Focus States (A11y) */
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible {
+    @apply ring-2 ring-primary/30 ring-offset-2 outline-none;
+  }
+
+  /* Enhanced Table Rows */
+  table tbody tr {
+    transition: background-color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  table tbody tr:hover {
+    @apply bg-gray-50/80;
+  }
+
+  /* Enhanced Modal Backdrop */
+  .modal-backdrop {
+    @apply backdrop-blur-sm;
+  }
+
+  /* Enhanced Shadows for Depth */
+  .shadow-elevated {
+    box-shadow: 
+      0 1px 3px rgba(0, 0, 0, 0.05),
+      0 10px 25px rgba(0, 0, 0, 0.05);
+  }
+
+  .shadow-elevated-lg {
+    box-shadow: 
+      0 2px 4px rgba(0, 0, 0, 0.05),
+      0 20px 40px rgba(0, 0, 0, 0.08);
+  }
+
+  /* Gradient Accents */
+  .gradient-accent {
+    background: linear-gradient(135deg, #3B82F6 0%, #8B5CF6 100%);
+  }
+
+  /* Enhanced Animations */
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .fade-in-up {
+    animation: fadeInUp 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Enhanced Tooltips */
+  [data-tooltip] {
+    position: relative;
+  }
+
+  [data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-8px);
+    padding: 6px 12px;
+    background: rgba(0, 0, 0, 0.85);
+    color: white;
+    font-size: 12px;
+    border-radius: 6px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 200ms, transform 200ms;
+  }
+
+  [data-tooltip]:hover::after {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-4px);
+  }
+
+  /* Enhanced Input Fields */
+  input[type="text"],
+  input[type="number"],
+  input[type="date"],
+  input[type="email"],
+  textarea,
+  select {
+    @apply focus:border-primary-400 focus:ring-2 focus:ring-primary/20;
+    transition: all 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* Enhanced Badge/Chip */
+  .badge {
+    @apply px-3 py-1 rounded-full text-sm font-medium;
+    backdrop-filter: blur(8px);
+  }
+
+  .badge-primary {
+    @apply bg-primary-100/80 text-primary-700;
+  }
+
+  .badge-success {
+    @apply bg-green-100/80 text-green-700;
+  }
+
+  .badge-danger {
+    @apply bg-red-100/80 text-red-700;
+  }
+
+  /* Enhanced Chart Container */
+  .chart-container {
+    @apply relative overflow-hidden;
+    border-radius: 1rem;
+  }
+
+  /* Glass Morphism Effect (optional) */
+  .glass {
+    background: rgba(255, 255, 255, 0.8);
+    backdrop-filter: blur(10px) saturate(180%);
+    border: 1px solid rgba(255, 255, 255, 0.5);
+  }
+
+  /* Subtle Hover Effects for Links */
+  a:not(.btn-primary):not(.btn-secondary) {
+    transition: color 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  a:not(.btn-primary):not(.btn-secondary):hover {
+    @apply text-primary-600;
+  }
+
+  /* Enhanced Dividers */
+  hr {
+    @apply border-gray-200/50;
+  }
+}
+
 .page-transition-enter-active {
   opacity: 1;
   transform: translateY(0);

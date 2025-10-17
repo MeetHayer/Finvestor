@@ -149,8 +149,8 @@ async def delete_portfolio(portfolio_id: str, session: AsyncSession = Depends(ge
 class HoldingUpsert(BaseModel):
     symbol: str
     qty: float
-    avg_cost: float = 0.0  # Will be overridden by database price if as_of is provided
-    as_of: Optional[date] = None  # If provided, will use open price from this date
+    avg_cost: Optional[float] = None  # Optional - will auto-fill from DB if None
+    as_of: Optional[date] = None  # Trade date - used for auto-pricing if avg_cost is None
 
 @router.get("/portfolios/{portfolio_id}/holdings")
 async def get_holdings(portfolio_id: str, session: AsyncSession = Depends(get_session)):
@@ -159,6 +159,30 @@ async def get_holdings(portfolio_id: str, session: AsyncSession = Depends(get_se
         FROM portfolio_holding WHERE portfolio_id = :pid ORDER BY symbol
     """), {"pid": portfolio_id})
     return [dict(r._mapping) for r in res.fetchall()]
+
+async def get_close_or_prior(session: AsyncSession, ticker_id: str, target_date: date) -> Optional[float]:
+    """
+    Get close price for target_date, or nearest prior date within 10 days.
+    
+    Returns:
+        float: close price
+        None: if no price found within 10-day window
+    """
+    from datetime import timedelta
+    
+    for i in range(11):  # 0 to 10 days back
+        check_date = target_date - timedelta(days=i)
+        res = await session.execute(text("""
+            SELECT close FROM price_daily 
+            WHERE ticker_id = :ticker_id AND date = :date
+        """), {"ticker_id": ticker_id, "date": check_date})
+        
+        row = res.first()
+        if row:
+            return float(row.close)
+    
+    return None
+
 
 @router.post("/portfolios/{portfolio_id}/holdings")
 async def upsert_holding(portfolio_id: str, h: HoldingUpsert, session: AsyncSession = Depends(get_session)):
@@ -171,26 +195,28 @@ async def upsert_holding(portfolio_id: str, h: HoldingUpsert, session: AsyncSess
     
     ticker_id = ticker_row.id
     
-    # Get the open price for the selected date (or latest available date)
-    price_res = await session.execute(text("""
-        SELECT pd.open, pd.date
-        FROM price_daily pd
-        WHERE pd.ticker_id = :ticker_id
-        AND pd.date <= COALESCE(:as_of, CURRENT_DATE)
-        ORDER BY pd.date DESC
-        LIMIT 1
-    """), {"ticker_id": ticker_id, "as_of": h.as_of})
+    # Determine trade date (use as_of if provided, else today)
+    from datetime import date as datetime_date
+    trade_date = h.as_of if h.as_of else datetime_date.today()
     
-    price_row = price_res.first()
-    if not price_row:
-        raise HTTPException(status_code=404, detail=f"No price data found for {h.symbol.upper()} on {h.as_of or 'any date'}")
-    
-    # Use the open price from the database, or the provided avg_cost if no date specified
-    actual_cost = float(price_row.open) if h.as_of else h.avg_cost
+    # Determine avg_cost
+    if h.avg_cost is not None:
+        # User provided avg_cost - use it
+        actual_cost = h.avg_cost
+    else:
+        # Auto-fill from database price
+        actual_cost = await get_close_or_prior(session, ticker_id, trade_date)
+        
+        if actual_cost is None:
+            raise HTTPException(
+                status_code=422, 
+                detail=f"No price available to auto-fill average_cost for {h.symbol.upper()} on {trade_date}. "
+                       f"Please provide avg_cost manually or choose a different date."
+            )
     
     q = text("""
         INSERT INTO portfolio_holding (portfolio_id, ticker_id, shares, average_cost, added_at)
-        VALUES (:pid, :ticker_id, :shares, :avg_cost, COALESCE(:as_of, CURRENT_DATE))
+        VALUES (:pid, :ticker_id, :shares, :avg_cost, :trade_date)
         ON CONFLICT (portfolio_id, ticker_id)
         DO UPDATE SET shares = EXCLUDED.shares, average_cost = EXCLUDED.average_cost, added_at = EXCLUDED.added_at
         RETURNING id::text, shares, average_cost, added_at
@@ -201,7 +227,7 @@ async def upsert_holding(portfolio_id: str, h: HoldingUpsert, session: AsyncSess
         "ticker_id": ticker_id, 
         "shares": h.qty, 
         "avg_cost": actual_cost, 
-        "as_of": h.as_of
+        "trade_date": trade_date
     })).first()
     
     await session.commit()
@@ -215,7 +241,8 @@ async def upsert_holding(portfolio_id: str, h: HoldingUpsert, session: AsyncSess
         "symbol": symbol,
         "qty": float(row.shares),
         "avg_cost": float(row.average_cost),
-        "as_of": row.added_at
+        "as_of": row.added_at,
+        "auto_priced": h.avg_cost is None  # Indicate if price was auto-filled
     }
 
 @router.delete("/portfolios/{portfolio_id}/holdings/{symbol}")
