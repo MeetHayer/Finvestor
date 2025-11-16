@@ -8,6 +8,7 @@ import sys
 import pandas as pd
 from pathlib import Path
 from sqlalchemy import create_engine, text, inspect
+from sqlalchemy.engine import make_url
 from dotenv import load_dotenv
 import logging
 import zipfile
@@ -22,17 +23,17 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 
-def get_database_url():
-    """Get DATABASE_URL from .env"""
+def _with_driver(url: str, driver: str = "psycopg") -> str:
+    parsed = make_url(url)
+    return str(parsed.set(drivername=f"postgresql+{driver}"))
+
+
+def get_database_url(driver: str = "psycopg"):
+    """Get DATABASE_URL/Postgres DSN with explicit driver."""
     db_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_DSN")
     if not db_url:
         raise RuntimeError("DATABASE_URL or POSTGRES_DSN not set in .env")
-    
-    # Ensure it's using psycopg driver
-    if db_url.startswith("postgresql://"):
-        db_url = db_url.replace("postgresql://", "postgresql+psycopg://", 1)
-    
-    return db_url
+    return _with_driver(db_url, driver)
 
 
 def create_staging_table(engine):
@@ -419,7 +420,7 @@ if __name__ == "__main__":
     parser.add_argument("--import-names-dir", help="Directory of CSVs for names")
     parser.add_argument("--import-prices-dir", help="Directory of CSVs for prices")
     args = parser.parse_args()
-    engine = create_engine(os.getenv("DATABASE_URL"))
+    engine = create_engine(get_database_url())
     if args.import_names:
         print({"names_updated": upsert_names_csv(engine, args.import_names)})
     if args.import_prices:
