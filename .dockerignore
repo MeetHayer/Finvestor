@@ -1,0 +1,50 @@
+# Git
+.git
+.gitignore
+.github
+
+# Frontend (not needed for backend deploy)
+frontend/node_modules
+frontend/dist
+frontend/.vite
+
+# Python
+backend/.venv
+backend/__pycache__
+backend/**/__pycache__
+backend/**/*.pyc
+backend/**/*.pyo
+backend/**/*.pyd
+*.egg-info
+
+# Backend data and logs
+backend/data
+backend/logs
+backend/seed
+backend/scripts
+backend/tests
+
+# Docs
+docs/
+*.md
+README.md
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Misc
+*.log
+.env.example
+
