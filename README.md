@@ -228,28 +228,6 @@ This multi-source approach ensures you always get accurate, up-to-date informati
 
 ---
 
-## 🚀 Deployment Options
-
-### Railway (Recommended)
-Easiest way to deploy Finvestor:
-1. Sign in to [Railway.app](https://railway.app) with GitHub
-2. Select your Finvestor repository
-3. Railway automatically detects your frontend, backend, and database
-4. Deploy with one click!
-
-### Vercel (Frontend) + Railway (Backend)
-Split deployment:
-- Host your React frontend on Vercel (super fast)
-- Host your FastAPI backend + database on Railway
-- Connect them with environment variables
-
-### Other Options
-- Render - Similar to Railway
-- Fly.io - Great for full-stack apps
-- DigitalOcean - Traditional hosting
-
----
-
 ## 📚 Project Structure
 
 ```
