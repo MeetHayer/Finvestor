@@ -15,115 +15,94 @@ logger = logging.getLogger(__name__)
 
 async def calculate_portfolio_metrics(session: AsyncSession, portfolio_id: str) -> Dict:
     """
-    Calculate comprehensive portfolio metrics including:
-    - Total value
-    - Total cost basis
-    - Total return ($)
-    - Total return (%)
-    - Holding period return for each position
-    - Average beta
-    - Individual position metrics
+    Calculate simple portfolio metrics:
+    - Current portfolio value
+    - Portfolio return (% change since inception)
     """
+    from sqlalchemy import text
+    from collections import defaultdict
     
-    # Get portfolio with holdings
-    stmt = select(Portfolio).where(Portfolio.id == portfolio_id).options(
-        selectinload(Portfolio.holdings).selectinload(PortfolioHolding.ticker)
-    )
-    result = await session.execute(stmt)
-    portfolio = result.scalar_one_or_none()
+    # Check if portfolio exists
+    p_check = await session.execute(text("SELECT inception_date, COALESCE(initial_value,0) as initial_value FROM portfolio WHERE id = :pid"), {"pid": portfolio_id})
+    p_row = p_check.first()
     
-    if not portfolio:
+    if not p_row:
         return None
     
-    total_value = 0.0
-    total_cost = 0.0
-    weighted_beta_sum = 0.0
-    position_metrics = []
+    inception_date = p_row.inception_date
+    initial_value = float(p_row.initial_value or 0)
     
-    for holding in portfolio.holdings:
-        # Get current price
-        latest_price_stmt = select(PriceDaily).where(
-            PriceDaily.ticker_id == holding.ticker_id
-        ).order_by(PriceDaily.date.desc()).limit(1)
-        latest_price_result = await session.execute(latest_price_stmt)
-        latest_price = latest_price_result.scalar_one_or_none()
+    # Calculate current portfolio value
+    try:
+        # Get all transactions to build current position state
+        all_tx_res = await session.execute(text("""
+            SELECT symbol, side, qty, price
+            FROM portfolio_transaction
+            WHERE portfolio_id = :pid
+            ORDER BY trade_date ASC, created_at ASC
+        """), {"pid": portfolio_id})
+        all_txs = [dict(r._mapping) for r in all_tx_res.fetchall()]
         
-        if not latest_price:
-            continue
+        if not all_txs:
+            # No transactions yet, value = initial cash
+            current_value = initial_value
+        else:
+            # Build current positions
+            positions = defaultdict(float)
+            running_cash = initial_value
+            
+            for t in all_txs:
+                q = float(t['qty'] or 0)
+                px = float(t['price'] or 0)
+                if t['side'] == 'BUY':
+                    positions[t['symbol']] += q
+                    running_cash -= q * px
+                elif t['side'] == 'SELL':
+                    positions[t['symbol']] -= q
+                    running_cash += q * px
+            
+            # Get current prices for holdings
+            symbols = [s for s, q in positions.items() if q > 0]
+            holdings_value = 0.0
+            
+            if symbols:
+                px_res = await session.execute(text("""
+                    SELECT t.symbol, pd.close
+                    FROM ticker t
+                    JOIN price_daily pd ON pd.ticker_id = t.id
+                    WHERE t.symbol = ANY(:symbols) 
+                      AND pd.date = (
+                          SELECT MAX(pd2.date) 
+                          FROM price_daily pd2 
+                          WHERE pd2.ticker_id = t.id
+                      )
+                """), {"symbols": symbols})
+                prices = {r.symbol: float(r.close or 0) for r in px_res.fetchall()}
+                
+                for symbol, qty in positions.items():
+                    if qty > 0 and symbol in prices:
+                        holdings_value += qty * prices[symbol]
+            
+            current_value = running_cash + holdings_value
         
-        current_price = float(latest_price.close)
-        cost_basis = float(holding.average_cost) if holding.average_cost else 0
-        shares = float(holding.shares)
+        # Calculate portfolio return
+        portfolio_return = ((current_value - initial_value) / initial_value * 100) if initial_value > 0 else 0.0
         
-        # Calculate position metrics
-        position_value = current_price * shares
-        position_cost = cost_basis * shares
-        position_return_dollar = position_value - position_cost
-        position_return_pct = (position_return_dollar / position_cost * 100) if position_cost > 0 else 0
-        
-        # Calculate holding period (days)
-        holding_period_days = (date.today() - holding.added_at.date()).days
-        
-        # Get beta from fundamentals
-        beta_stmt = select(FundamentalsCache).where(
-            FundamentalsCache.ticker_id == holding.ticker_id
-        )
-        beta_result = await session.execute(beta_stmt)
-        fundamentals = beta_result.scalar_one_or_none()
-        beta = float(fundamentals.beta) if fundamentals and fundamentals.beta else 1.0
-        
-        # Add to totals
-        total_value += position_value
-        total_cost += position_cost
-        weighted_beta_sum += beta * position_value
-        
-        position_metrics.append({
-            'symbol': holding.ticker.symbol,
-            'name': holding.ticker.name,
-            'shares': shares,
-            'cost_basis': cost_basis,
-            'current_price': current_price,
-            'position_value': position_value,
-            'position_cost': position_cost,
-            'return_dollar': position_return_dollar,
-            'return_pct': position_return_pct,
-            'holding_period_days': holding_period_days,
-            'beta': beta,
-            'weight': 0  # Will calculate after we have total_value
-        })
+        return {
+            "portfolio_return": float(portfolio_return),  # % return since inception
+            "current_value": float(current_value),
+            "initial_value": float(initial_value),
+            "gain_loss": float(current_value - initial_value)
+        }
     
-    # Calculate position weights
-    for pos in position_metrics:
-        pos['weight'] = (pos['position_value'] / total_value * 100) if total_value > 0 else 0
-    
-    # Calculate portfolio-level metrics
-    total_return_dollar = total_value - total_cost
-    total_return_pct = (total_return_dollar / total_cost * 100) if total_cost > 0 else 0
-    average_beta = (weighted_beta_sum / total_value) if total_value > 0 else 1.0
-    
-    # Calculate portfolio return since inception
-    inception_days = (date.today() - portfolio.inception_date).days
-    initial_value = float(portfolio.initial_value) if portfolio.initial_value else total_cost
-    portfolio_return_dollar = total_value - initial_value
-    portfolio_return_pct = (portfolio_return_dollar / initial_value * 100) if initial_value > 0 else 0
-    
-    return {
-        'portfolio_id': str(portfolio.id),
-        'name': portfolio.name,
-        'inception_date': str(portfolio.inception_date),
-        'inception_days': inception_days,
-        'initial_value': initial_value,
-        'current_value': total_value,
-        'total_cost': total_cost,
-        'total_return_dollar': total_return_dollar,
-        'total_return_pct': total_return_pct,
-        'portfolio_return_dollar': portfolio_return_dollar,
-        'portfolio_return_pct': portfolio_return_pct,
-        'average_beta': average_beta,
-        'num_positions': len(position_metrics),
-        'positions': position_metrics
-    }
-
+    except Exception as e:
+        logger.exception(f"Failed to calculate portfolio metrics: {e}")
+        return {
+            "portfolio_return": 0.0,
+            "current_value": initial_value,
+            "initial_value": initial_value,
+            "gain_loss": 0.0
+        }
 
 async def calculate_watchlist_metrics(session: AsyncSession, watchlist_id: str) -> Dict:
     """
@@ -223,7 +202,4 @@ async def calculate_watchlist_metrics(session: AsyncSession, watchlist_id: str) 
         'num_tickers': len(ticker_metrics),
         'tickers': ticker_metrics
     }
-
-
-
 

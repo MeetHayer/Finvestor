@@ -204,6 +204,37 @@ npm run dev
 - Backend API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
 
+### Kaggle Dataset Seeding (Optional, Historical US Stocks)
+
+Finvestor can seed historical OHLCV data from the Kaggle dataset "Huge Stock Market Dataset" (`borismarjanovic/price-volume-data-for-all-us-stocks-etfs`). This flow loads all `*.us.txt` files into a staging table and then merges into the main schema.
+
+Prerequisites:
+- Backend virtualenv active
+- `backend/.env` with `DATABASE_URL` (psycopg) pointing to Postgres 17
+- Kaggle credentials at `~/.kaggle/kaggle.json` (with `chmod 600`)
+
+Install dependency (one-time):
+```bash
+cd backend
+source .venv/bin/activate
+pip install kagglehub
+```
+
+Seed from Kaggle (loads all symbols into `staging_prices`):
+```bash
+python seed/seed_from_kaggle.py
+```
+
+Merge staging into main tables (`ticker`, `price_daily`) and clean up:
+```bash
+PGPASSWORD=finvestor1234 psql -U finvestor -h localhost -d sampleStocksData -f scripts/merge_staging.sql
+```
+
+Notes:
+- The script normalizes file columns (Date, Open, High, Low, Close, Volume, OpenInt→open_interest) and adds `symbol` from the filename (e.g., `AAPL.us.txt → AAPL`).
+- Loads may take hours if processing tens of thousands of files; first runs are I/O heavy.
+- Inserts use `ON CONFLICT DO NOTHING` for idempotency (safe re-runs without duplicate rows).
+
 ---
 
 ## 5. Database Schema

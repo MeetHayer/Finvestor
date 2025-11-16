@@ -34,3 +34,9 @@ echo "SELECT symbol, COUNT(*) FROM price_daily pd JOIN ticker t ON pd.ticker_id=
 
 
 
+
+
+
+
+
+

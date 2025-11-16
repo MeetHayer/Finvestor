@@ -1,5 +1,6 @@
 import asyncio
 from .db import engine, Base
+from . import models  # Import all models to register them with Base.metadata
 
 async def main():
     async with engine.begin() as conn:

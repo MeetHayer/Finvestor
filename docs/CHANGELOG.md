@@ -4,6 +4,551 @@
 
 ---
 
+## 2025-10-17 - Fixed Cost Basis Display & Calendar Auto-Close
+
+**Files Modified:**
+- `frontend/src/routes/Portfolios.jsx` - Fixed cost basis display, calendar auto-close, added HPR
+- Database: Updated existing holdings with correct cost basis values
+
+**Change Description:**
+Fixed cost basis display issues and calendar behavior:
+
+**Bug Fixes:**
+1. **Cost Basis Display**: Holdings now show correct cost basis instead of $0.00
+2. **Calendar Auto-Close**: Date picker closes immediately after date selection
+3. **Historical Data**: Fixed existing holdings that had incorrect $0.00 cost basis
+
+**New Features:**
+1. **Holding Period Return**: Shows percentage return since inception date
+2. **Color-coded Returns**: Green for positive returns, red for negative
+3. **Cost Basis Display**: Shows "@ $X.XX" next to each holding
+
+**Backend Verification:**
+- AMZN on 2025-04-11: High=185.86, Low=178.00 → Avg=181.93 ✅
+- AAPL on 2025-10-15: High=250.29, Low=248.96 → Avg=249.645 ✅
+- Database updated to show correct cost basis values
+
+**Frontend Changes:**
+1. **Cost Basis Display**: Holdings show "@ $181.93" format
+2. **Calendar Fix**: `onChange` handler auto-closes picker after date selection
+3. **HPR Display**: Added "Holding Period Return" row under Current Value
+4. **Color Coding**: Green for gains (+X.XX%), red for losses (-X.XX%)
+
+**User Impact:**
+- ✅ **Correct Cost Basis**: Holdings show actual purchase price (high+low)/2
+- ✅ **Better UX**: Calendar closes immediately after date selection
+- ✅ **Performance Tracking**: See total return since portfolio inception
+- ✅ **Visual Feedback**: Color-coded returns (green/red)
+
+**Technical Details:**
+- Cost Basis: Calculated as `(high + low) / 2` from price_daily table
+- Calendar Fix: `onChange` → `e.target.blur()` + `document.activeElement?.blur()`
+- HPR Formula: `((current_value - initial_value) / initial_value) * 100`
+- Display Format: `AMZN ×10 @ $181.93`
+
+**Example Holdings:**
+```
+AMZN ×10 @ $181.93 (purchased 2025-04-11)
+AAPL ×5 @ $249.65 (purchased 2025-10-15)
+```
+
+**Rollback:**
+- Revert cost basis display changes
+- Revert calendar `onChange` handlers
+- Remove HPR display row
+
+---
+
+## 2025-10-17 - Fixed Calendar Auto-Close & Added HPR
+
+**Files Modified:**
+- `frontend/src/routes/Portfolios.jsx` - Fixed calendar auto-close, added HPR calculation
+
+**Change Description:**
+Fixed calendar behavior and added Holding Period Return:
+
+**Bug Fixes:**
+1. **Calendar Auto-Close**: Date picker now closes immediately after date selection
+2. **Event Handlers**: Replaced problematic `onFocus`/`onBlur` with `onChange`
+
+**New Features:**
+1. **Holding Period Return**: Shows percentage return since inception date
+2. **Color-coded Returns**: Green for positive returns, red for negative
+3. **Real-time Calculation**: Updates automatically when portfolio values change
+
+**Frontend Changes:**
+1. **Calendar Fix**: `onChange` handler auto-closes picker after date selection
+2. **HPR Display**: Added "Holding Period Return" row under Current Value
+3. **Color Coding**: Green for gains (+X.XX%), red for losses (-X.XX%)
+4. **Calculation**: HPR = ((Current Value - Initial Value) / Initial Value) × 100
+
+**User Impact:**
+- ✅ **Better UX**: Calendar closes immediately after date selection
+- ✅ **Performance Tracking**: See total return since portfolio inception
+- ✅ **Visual Feedback**: Color-coded returns (green/red)
+- ✅ **Real-time Updates**: HPR updates when portfolio values change
+
+**Technical Details:**
+- Calendar Fix: `onChange` → `e.target.blur()` + `document.activeElement?.blur()`
+- HPR Formula: `((current_value - initial_value) / initial_value) * 100`
+- Color Logic: `hpr >= 0 ? 'text-green-600' : 'text-red-600'`
+
+**Example HPR:**
+```
+Initial Value: $100,000
+Current Value: $106,573.63
+HPR: +6.57% (green)
+```
+
+**Rollback:**
+- Revert `onChange` handlers back to `onFocus`/`onBlur`
+- Remove HPR display row and calculation logic
+
+---
+
+## 2025-10-17 - Added Holding Period Return & Fixed Sell Functionality
+
+**Files Modified:**
+- `frontend/src/routes/Portfolios.jsx` - Added HPR calculation and display
+- `backend/app/api/portfolios_watchlists.py` - Fixed sell endpoint UUID handling
+
+**Change Description:**
+Added Holding Period Return calculation and fixed sell functionality:
+
+**New Features:**
+1. **Holding Period Return**: Shows percentage return since inception date
+2. **Color-coded Returns**: Green for positive returns, red for negative
+3. **Real-time Calculation**: Updates automatically when portfolio values change
+
+**Bug Fixes:**
+1. **Sell Endpoint**: Fixed UUID casting issues causing 500 errors
+2. **Error Handling**: Added proper try-catch with rollback for sell operations
+3. **Data Types**: Fixed numeric conversions for shares and prices
+
+**Frontend Changes:**
+1. **HPR Display**: Added "Holding Period Return" row under Current Value
+2. **Color Coding**: Green for gains (+X.XX%), red for losses (-X.XX%)
+3. **Calculation**: HPR = ((Current Value - Initial Value) / Initial Value) × 100
+4. **Real-time Updates**: HPR updates when holdings or cash changes
+
+**Backend Changes:**
+1. **UUID Handling**: Removed unnecessary `::uuid` casting in SQL queries
+2. **Error Handling**: Added comprehensive try-catch with session rollback
+3. **Data Conversion**: Explicit string conversion for UUIDs and numeric values
+4. **Logging**: Added error logging for debugging
+
+**User Impact:**
+- ✅ **Performance Tracking**: See total return since portfolio inception
+- ✅ **Visual Feedback**: Color-coded returns (green/red)
+- ✅ **Sell Functionality**: Can now sell holdings without errors
+- ✅ **Real-time Updates**: HPR updates automatically
+
+**Technical Details:**
+- HPR Formula: `((current_value - initial_value) / initial_value) * 100`
+- Color Logic: `hpr >= 0 ? 'text-green-600' : 'text-red-600'`
+- Sell Response: `{ok, sold_shares, price_per_share, proceeds, remaining_shares}`
+
+**Example HPR:**
+```
+Initial Value: $100,000
+Current Value: $106,573.63
+HPR: +6.57% (green)
+```
+
+**Rollback:**
+- Frontend: Remove HPR display row and calculation logic
+- Backend: Revert UUID handling changes in sell endpoint
+
+---
+
+## 2025-10-17 - Fixed Portfolio Holdings Display & Cost Basis Calculation
+
+**Files Modified:**
+- `frontend/src/routes/Portfolios.jsx` - Fixed holdings value display, calendar auto-close, cost basis messaging
+- `backend/app/api/portfolios_watchlists.py` - Updated cost basis calculation and cash validation
+
+**Change Description:**
+Fixed critical portfolio management issues:
+
+**Issues Fixed:**
+1. **Holdings Value Display**: Now shows actual holdings value instead of count
+2. **Calendar Auto-Close**: Date picker automatically closes when date is selected
+3. **Cost Basis Calculation**: Uses (high+low)/2 instead of close price
+4. **Cash Validation**: Prevents buying if insufficient cash balance
+
+**Backend Changes:**
+1. **Cost Basis Function**: Renamed `get_close_or_prior` to `get_avg_price_or_prior`
+2. **Price Calculation**: Now uses `(high + low) / 2` for cost basis
+3. **Cash Validation**: Checks if `total_cost > current_cash` before purchase
+4. **Cash Deduction**: Automatically subtracts cost from portfolio cash
+5. **Enhanced Response**: Returns `total_cost`, `remaining_cash`, and `auto_priced` fields
+
+**Frontend Changes:**
+1. **Holdings Value**: Shows "Holdings Value: $X,XXX.XX" instead of "Holdings (count)"
+2. **Calendar Behavior**: Added `onFocus` and `onBlur` handlers for auto-close
+3. **Cost Basis Message**: Updated to "Cost basis will be set to (high + low) / 2"
+4. **Error Handling**: Shows specific error messages for insufficient cash
+5. **Success Messages**: Shows cost details and remaining cash after purchase
+
+**User Impact:**
+- ✅ **Accurate Holdings Value**: See actual dollar value of stock holdings
+- ✅ **Better UX**: Calendar closes automatically after date selection
+- ✅ **Realistic Pricing**: Uses average of high/low for more accurate cost basis
+- ✅ **Cash Management**: Can't overspend, cash is automatically deducted
+- ✅ **Clear Feedback**: Detailed success/error messages with cost information
+
+**Technical Details:**
+- Cost basis: `(high + low) / 2` from price_daily table
+- Cash validation: `if total_cost > current_cash: raise 400 error`
+- Cash update: `UPDATE portfolio SET cash = cash - total_cost`
+- Response format: `{total_cost, remaining_cash, auto_priced}`
+
+**Example Transaction:**
+```
+Purchase: 5 shares of AAPL on 2025-10-15
+Cost basis: $249.645 (high+low)/2
+Total cost: $1,248.23
+Cash before: $100,000.00
+Cash after: $98,751.78
+```
+
+**Rollback:**
+- Backend: Revert `get_avg_price_or_prior` function and cash validation logic
+- Frontend: Revert holdings value display and calendar handlers
+
+---
+
+## 2025-10-17 - Fixed Portfolio Value Display & Sell Functionality
+
+**Files Modified:**
+- `frontend/src/routes/Portfolios.jsx` - Fixed portfolio value calculation, added sell modal, improved cash display
+
+**Change Description:**
+Fixed critical issues with portfolio management:
+
+**Issues Fixed:**
+1. **$NaN Portfolio Value**: Fixed calculation to include both holdings value AND cash balance
+2. **Missing Cash Section**: Now displays cash balance prominently in portfolio cards
+3. **Remove vs Sell**: Replaced "Remove" buttons with "Sell" buttons for holdings
+4. **Sell Functionality**: Added complete sell modal with current price fetching
+
+**Frontend Changes:**
+1. **Portfolio Value Calculation**: `currentValue = holdingsValue + cashBalance`
+2. **Cash Display**: Shows "Cash Balance: $1,511.62" in portfolio cards
+3. **Sell Modal**: Modern modal for selling shares with:
+   - Share quantity input with validation
+   - Current price fetching from API
+   - Proceeds calculation preview
+   - Confirmation before selling
+4. **Empty State**: Shows "No holdings - All in cash ($1,511.62)" when no holdings
+5. **Real-time Updates**: Portfolio values update automatically after sells
+
+**Backend Integration:**
+- Uses POST `/api/portfolios/{id}/holdings/{symbol}/sell` endpoint
+- Fetches current price via Finnhub API (fallback to database)
+- Updates portfolio cash balance automatically
+- Handles partial sells (reduce shares) and full sells (delete holding)
+
+**User Impact:**
+- ✅ **Correct Values**: Portfolio shows actual current value (cash + holdings)
+- ✅ **Cash Visibility**: Clear cash balance display
+- ✅ **Sell Functionality**: Can sell shares and see proceeds added to cash
+- ✅ **No More $NaN**: Portfolio values display correctly
+
+**Technical Details:**
+- Portfolio value = Σ(shares × current_price) + cash_balance
+- Sell endpoint: `{qty: number}` → `{sold_shares, price_per_share, proceeds, remaining_shares}`
+- Frontend refetches portfolio data after successful sell
+
+**Rollback:**
+- Frontend: Revert Portfolios.jsx to previous version
+
+---
+
+## 2025-10-17 - Enhanced Portfolio Creation UX & Cash Management
+
+**Files Modified:**
+- `backend/app/models.py` - Added `cash` field to Portfolio model
+- `backend/app/api/portfolios_watchlists.py` - Added sell holdings endpoint, cash tracking
+- `backend/scripts/add_cash_to_portfolio.sql` - Migration script for cash column
+- `frontend/src/routes/Portfolios.jsx` - Redesigned portfolio creation modal
+
+**Change Description:**
+Completely revamped portfolio management with better UX and cash tracking:
+
+**Backend Changes:**
+1. **Cash Field**: Added `cash` column to portfolio table (defaults to initial_value)
+2. **Sell Endpoint**: POST `/portfolios/{id}/holdings/{symbol}/sell` - Sells shares and adds proceeds to cash
+3. **Auto-Pricing**: Uses Finnhub API for current price, falls back to database
+4. **Partial Sells**: Can sell portion of holdings or all at once
+
+**Frontend Changes:**
+1. **Enhanced Modal**: Redesigned create portfolio modal with modern UI
+2. **Date Quick Select**: Buttons for "Today", "1 Month Ago", "1 Year Ago"
+3. **Smart Defaults**: Inception date defaults to today
+4. **Empty Initial Value**: Cash input now empty by default (not $0)
+5. **Better Labels**: "Starting Cash (Optional)" instead of "Initial Value"
+6. **Visual Polish**: Icon header, backdrop blur, smooth animations
+7. **Improved Inputs**: Larger, easier to use with better focus states
+
+**User Impact:**
+- ✅ **Easier Portfolio Creation**: Quick date selection, clearer labels
+- ✅ **Cash Management**: Track cash separately from holdings
+- ✅ **Sell Holdings**: Sell shares and add proceeds to cash automatically
+- ✅ **Better UX**: Modern, intuitive interface with helpful hints
+- ✅ **Auto-Pricing**: Current market price used for sells
+
+**Technical Details:**
+- Migration adds `cash NUMERIC(18,2) DEFAULT 0.0 NOT NULL`
+- Sell endpoint calculates: `proceeds = qty * current_price`
+- Updates: `portfolio.cash += proceeds` and `holding.shares -= qty`
+- If selling all shares, holding is deleted automatically
+
+**API Response (Sell):**
+```json
+{
+  "ok": true,
+  "sold_shares": 10,
+  "price_per_share": 247.45,
+  "proceeds": 2474.50,
+  "remaining_shares": 5
+}
+```
+
+**Rollback:**
+- Backend: Run `ALTER TABLE portfolio DROP COLUMN cash;`
+- Frontend: Revert Portfolios.jsx to previous version
+
+---
+
+## 2025-10-17 - Fixed Candlestick Color Reversal
+
+**Files Modified:**
+- `frontend/src/routes/TickerDetail.jsx` - Swapped candlestick color assignments
+
+**Change Description:**
+Fixed reversed candlestick colors where green was showing for down days and red for up days:
+- **Before**: `color` (red) for up days, `color0` (green) for down days ❌
+- **After**: `color` (green) for up days, `color0` (red) for down days ✅
+
+**User Impact:**
+- ✅ **Correct Colors**: Green candlesticks now correctly show positive days (close >= open)
+- ✅ **Correct Colors**: Red candlesticks now correctly show negative days (close < open)
+- ✅ **Intuitive**: Standard financial chart color convention
+
+**Technical Details:**
+In ECharts candlestick:
+- `color` is used when close >= open (increasing) → should be GREEN
+- `color0` is used when close < open (decreasing) → should be RED
+
+The colors were swapped in the original implementation.
+
+**Rollback:**
+Swap the colors back to the previous configuration.
+
+---
+
+## 2025-10-17 - Benchmarks 52-Week High/Low Data
+
+**Files Modified:**
+- `backend/app/services/benchmarks_live.py` - Added 52-week high/low calculation
+- `frontend/src/sections/IndexBenchmarks.jsx` - Display 52-week high/low data
+
+**Change Description:**
+Added 52-week high and low price data to benchmark indexes (SPY, QQQ, DIA):
+1. **Alpha Vantage Calculation**: Calculates 52-week high/low from available 100-day data
+2. **Database Fallback**: If API doesn't provide it, attempts to fetch from database
+3. **Frontend Display**: Shows 52W: $XXX.XX / $XXX.XX in benchmark cards
+
+**User Impact:**
+- ✅ **52-Week Range**: See the trading range for SPY, QQQ, DIA
+- ✅ **Context**: Understand if current price is near highs or lows
+- ✅ **Automatic**: Calculated and displayed automatically
+
+**Technical Details:**
+- Alpha Vantage returns 100 days of data (compact mode)
+- Calculates max(high) and min(low) from available data
+- Falls back to database query for full 365-day range
+- Adds `week_52_high` and `week_52_low` fields to API response
+
+**API Response Format:**
+```json
+{
+  "symbol": "SPY",
+  "close": 660.64,
+  "change": -4.53,
+  "change_pct": -0.68,
+  "week_52_high": 668.90,
+  "week_52_low": 505.12
+}
+```
+
+**Note:** ETFs (SPY, QQQ, DIA) are not currently in the database, so 52-week data comes from Alpha Vantage's 100-day window. This still provides useful high/low reference.
+
+**Rollback:**
+Remove 52-week calculation logic from `benchmarks_live.py`.
+
+---
+
+## 2025-10-17 - Watchlist Live Prices with Color Coding
+
+**Files Modified:**
+- `frontend/src/routes/Watchlists.jsx` - Added live price display with color-coded backgrounds
+
+**Change Description:**
+Enhanced watchlist display to show real-time stock prices with visual indicators:
+1. **Live Prices**: Fetches last business day close price for each ticker
+2. **Color-Coded Backgrounds**: Green background for positive change, red for negative
+3. **Change Indicators**: Shows $ change and % change
+4. **Trend Icons**: TrendingUp (green) or TrendingDown (red) icons
+5. **Auto-Refresh**: Prices update whenever watchlists are loaded
+
+**User Impact:**
+- ✅ **At-a-Glance View**: See which stocks are up/down today with color coding
+- ✅ **Current Prices**: Display latest close price for each ticker
+- ✅ **Daily Performance**: Shows +/- $ and % change from previous day
+- ✅ **Visual Clarity**: Green = positive, Red = negative (intuitive)
+- ✅ **Interactive**: Click ticker to see full chart
+
+**Technical Details:**
+- Fetches `/api/data/{symbol}?range_days=2` to get latest and previous close
+- Calculates change and changePercent client-side
+- Uses useEffect to fetch prices when watchlists change
+- Applies Tailwind classes: `bg-green-50`/`bg-red-50` with matching borders
+
+**Display Format:**
+```
+AAPL                    $247.45
++0.32% today           +$0.80
+[Green background with TrendingUp icon]
+```
+
+**Rollback:**
+Revert changes to `Watchlists.jsx` to remove price fetching logic.
+
+---
+
+## 2025-10-17 - Interactive Chart Zoom & Improved Tooltip
+
+**Files Modified:**
+- `frontend/src/routes/TickerDetail.jsx` - Added dataZoom controls and fixed tooltip display
+
+**Change Description:**
+Enhanced the candlestick chart with interactive zoom functionality and improved tooltip display:
+1. **Mouse Wheel Zoom**: Scroll to zoom in/out on the chart
+2. **Drag to Pan**: Click and drag to move around the zoomed chart
+3. **Zoom Slider**: Interactive slider at bottom for precise zoom control
+4. **Fixed Tooltip**: Corrected OHLC values display order (was showing incorrect mapping)
+5. **Enhanced Tooltip**: Added daily change $ and % in tooltip, better formatting
+
+**User Impact:**
+- ✅ **Interactive Zooming**: Mouse wheel zoom in/out, drag to pan
+- ✅ **Zoom Slider**: Visual slider bar at bottom for precise control
+- ✅ **Accurate Data**: Tooltip now shows correct High/Low values (was reversed before)
+- ✅ **Better Formatting**: Cleaner tooltip with daily change calculation
+- ✅ **Color Coding**: High in green, Low in red for quick visual reference
+
+**Technical Details:**
+- Added `dataZoom` with `inside` (mouse wheel) and `slider` (visual bar) types
+- Fixed tooltip formatter to correctly map: Open=data[0], Close=data[1], Low=data[2], High=data[3]
+- Adjusted grid layout to accommodate zoom slider (top: 90%)
+- Added daily change calculation: (close - open) and percentage
+
+**Rollback:**
+Remove `dataZoom` configuration from chart options.
+
+---
+
+## 2025-10-17 - Auto-Seeding Price Data
+
+**Files Modified:**
+- `backend/app/api/routes.py` - Added `auto_seed_missing_prices()` function
+
+**Change Description:**
+Implemented automatic price data seeding. When any ticker is looked up, the system:
+1. Checks the latest date we have price data for
+2. Compares to last business day (today, or Friday if weekend)
+3. Automatically fetches and seeds missing dates from Alpha Vantage API
+4. Inserts new data into `price_daily` table
+
+**User Impact:**
+- ✅ **Always Fresh Data**: Price charts automatically update with latest trading days
+- ✅ **Zero Manual Intervention**: Data stays current without admin work
+- ✅ **Smart Detection**: Only fetches missing dates (efficient API usage)
+- ✅ **Weekend Aware**: Correctly handles weekends (doesn't expect Saturday/Sunday data)
+
+**Testing:**
+- ✅ GOOGL auto-seeded 7 days (Oct 9 → Oct 16)
+- ✅ AAPL already current, skipped seeding
+- ✅ Database now has 1260 days for GOOGL
+
+**Rollback:**
+Remove the `await auto_seed_missing_prices(symbol, session)` call from the `/data/{symbol}` endpoint.
+
+---
+
+## 2025-10-17 - Fundamentals & Benchmarks Live API Integration
+
+**Files Modified:**
+- `backend/app/services/fundamentals.py` - Rewrite to use Alpha Vantage & Finnhub APIs
+- `backend/app/services/benchmarks_live.py` - Rewrite to use Finnhub & Alpha Vantage APIs for ETFs
+- `frontend/src/sections/IndexBenchmarks.jsx` - Updated to parse array-based API response
+
+**Change Description:**
+Integrated Alpha Vantage (key: `5BPNWBD7BEPLFK2R`) and Finnhub (key: `d3k100pr01qtciv0v8hgd3k100pr01qtciv0v8i0`) APIs to fetch LIVE fundamentals (P/E, Market Cap, Beta) and benchmark data (SPY, QQQ, DIA). Implemented 3-tier fallback: Alpha Vantage → Finnhub → Calculated from database. Added 5-minute cache for fundamentals, 60-second cache for benchmarks.
+
+**User Impact:**
+- ✅ Ticker pages now show REAL P/E ratios, Market Cap, Beta from live APIs
+- ✅ Home page benchmarks display current SPY/QQQ/DIA prices with daily changes
+- ✅ Data always displays even if APIs fail (fallback to calculated values)
+
+**Rollback:**
+Remove API keys from environment variables; service will use database-calculated values.
+
+---
+
+## 2025-01-09 | Fundamentals API Fix
+
+### Files Modified:
+- `backend/app/api/routes.py` - Fixed SQL query to use `fetched_at` instead of `updated_at`
+- `backend/app/services/fundamentals.py` - **NEW**: Created robust fundamentals service with multiple API fallbacks
+
+### Purpose:
+Fix the broken fundamentals display on ticker detail pages that was showing "Database fundamentals failed" errors.
+
+### API Changes:
+- **Fixed**: SQL query now uses correct column name (`fetched_at` instead of `updated_at`)
+- **Enhanced**: New fundamentals service with multiple fallback APIs:
+  1. **Calculated**: Uses database price data to compute 52-week high/low and average volume
+  2. **yahoo_fin**: Primary external API (currently rate-limited)
+  3. **yfinance**: Secondary external API (currently rate-limited)
+
+### User Impact:
+- ✅ **Fixed**: Fundamentals section now displays properly on ticker detail pages
+- ✅ **Enhanced**: Shows 52-week high/low calculated from actual price data
+- ✅ **Resilient**: Works even when external APIs are rate-limited
+- ✅ **Fast**: 5-minute in-memory caching to reduce API calls
+
+### Implementation Details:
+- Created `FundamentalsService` class with async methods
+- Implements graceful fallback chain when APIs fail
+- Calculates meaningful fundamentals from existing price data
+- Safe value conversion with proper error handling
+
+### Testing:
+```bash
+# Test fundamentals API
+curl "http://localhost:8000/api/data/AAPL?range_days=30" | jq '.fundamentals'
+# Expected: Shows 52-week high/low and calculated values
+```
+
+### Rollback Instructions:
+1. Revert `backend/app/api/routes.py` to use old fundamentals logic
+2. Delete `backend/app/services/fundamentals.py`
+3. Restart backend server
+
+---
+
 ## Cleanup/Delete Proposal (Before Starting Implementation)
 
 ### Files to Delete (Pending Verification):

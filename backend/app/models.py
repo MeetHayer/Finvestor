@@ -122,6 +122,7 @@ class Portfolio(Base):
     description: Mapped[str] = mapped_column(String(1000), nullable=True)
     inception_date: Mapped[date] = mapped_column(Date, nullable=False)
     initial_value: Mapped[float] = mapped_column(Numeric(18, 2), nullable=True, default=0)
+    cash: Mapped[float] = mapped_column(Numeric(18, 2), nullable=False, default=0, server_default=text("0.0"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime,
         server_default=text("CURRENT_TIMESTAMP"),

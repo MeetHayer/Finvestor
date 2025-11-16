@@ -29,33 +29,66 @@ export default function IndexBenchmarks() {
     queryKey: ['benchmarks'],
     queryFn: async () => {
       try {
-        // Use the new dedicated benchmarks endpoint
+        // Use the new dedicated benchmarks endpoint (returns array)
         const data = await getJSON('/benchmarks');
         
         const out = {};
-        for (const symbol of symbols) {
-          const benchmarkData = data[symbol];
-          if (benchmarkData) {
-            const latest = benchmarkData.latest || {};
-            const close = latest.close || 0;
-            const prevClose = latest.prevClose || close;
-            const chg = close - prevClose;
-            const pct = prevClose ? (chg / prevClose) * 100 : 0;
+        
+        // Check if data is an array (new format) or object (old format)
+        if (Array.isArray(data)) {
+          // New format: array of benchmark objects
+          for (const benchmark of data) {
+            const symbol = benchmark.symbol;
             
-            // Get 52-week high/low from fundamentals
-            const week52High = benchmarkData.fundamentals?.fiftyTwoWeekHigh || 0;
-            const week52Low = benchmarkData.fundamentals?.fiftyTwoWeekLow || 0;
+            // Check if there's an error
+            if (benchmark.error) {
+              console.warn(`Benchmark error for ${symbol}:`, benchmark.error);
+              out[symbol] = { close: 0, changeDollar: 0, changePct: 0, week52High: 0, week52Low: 0 };
+              continue;
+            }
+            
+            // Extract data from new format
+            const close = benchmark.close || 0;
+            const prevClose = benchmark.previous_close || 0;
+            const changeDollar = benchmark.change || 0;
+            const changePct = benchmark.change_pct || 0;
+            const week52High = benchmark.week_52_high || 0;
+            const week52Low = benchmark.week_52_low || 0;
             
             out[symbol] = { 
               close, 
-              changeDollar: chg,
-              changePct: +pct.toFixed(2),
+              changeDollar,
+              changePct,
               week52High,
               week52Low
             };
-          } else {
-            // Fallback if symbol not found
-            out[symbol] = { close: 0, changeDollar: 0, changePct: 0, week52High: 0, week52Low: 0 };
+          }
+        } else {
+          // Old format: object with symbols as keys
+          for (const symbol of symbols) {
+            const benchmarkData = data[symbol];
+            if (benchmarkData) {
+              const latest = benchmarkData.latest || {};
+              const close = latest.close || 0;
+              const prevClose = latest.prevClose || close;
+              const chg = close - prevClose;
+              const pct = prevClose ? (chg / prevClose) * 100 : 0;
+              
+              // Get 52-week high/low from fundamentals
+              const week52High = benchmarkData.fundamentals?.fiftyTwoWeekHigh || 0;
+              const week52Low = benchmarkData.fundamentals?.fiftyTwoWeekLow || 0;
+              
+              out[symbol] = { 
+                close, 
+                changeDollar: chg,
+                changePct: +pct.toFixed(2),
+                week52High,
+                week52Low
+              };
+            } else {
+              // Fallback if symbol not found
+              out[symbol] = { close: 0, changeDollar: 0, changePct: 0, week52High: 0, week52Low: 0 };
+            }
           }
         }
         return out;

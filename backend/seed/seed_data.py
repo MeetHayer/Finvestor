@@ -415,6 +415,17 @@ def main():
         logger.info("🎯 On-demand mode: fetching only requested symbols")
     
     asyncio.run(seed_database(symbols=args.symbols, on_demand=args.on_demand))
+    
+    # Conditional Kaggle data loading
+    if os.getenv("USE_KAGGLE_DATA") == "1":
+        logger.info("=" * 70)
+        logger.info("🔄 Loading Kaggle dataset as requested (USE_KAGGLE_DATA=1)")
+        logger.info("=" * 70)
+        try:
+            from seed.seed_from_kaggle import main as seed_kaggle
+            seed_kaggle()
+        except Exception as e:
+            logger.error(f"Failed to load Kaggle data: {e}")
 
 
 if __name__ == "__main__":

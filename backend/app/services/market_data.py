@@ -7,6 +7,8 @@ import yfinance as yf
 import pandas as pd
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
+from datetime import date as _date, timedelta as _td, datetime as _dt
+from sqlalchemy import text
 import logging
 
 log = logging.getLogger(__name__)
@@ -158,3 +160,133 @@ class MarketDataFetcher:
 
 def get_market_data_fetcher() -> MarketDataFetcher:
     return MarketDataFetcher()
+
+def _last_business_day(today: Optional[_date] = None) -> _date:
+    today = today or _date.today()
+    wd = today.weekday()
+    if wd == 5: return today - _td(days=1)
+    if wd == 6: return today - _td(days=2)
+    return today
+
+async def fetch_daily_history(symbol: str, days: int = 420) -> List[Dict[str, Any]]:
+    """
+    Return list of dicts [{date, open, high, low, close, volume}] for ~last 400-420 days.
+    Try yahooquery -> yfinance -> (AlphaVantage if key) -> (Finnhub if key).
+    """
+    sym = symbol.upper()
+    # Try yahooquery
+    try:
+        import yahooquery as yq
+        df = yq.Ticker(sym).history(period='2y', interval='1d')
+        if df is not None and not df.empty:
+            if hasattr(df, 'reset_index'):
+                df = df.reset_index()
+            rows=[]
+            for idx, r in df.iterrows():
+                # Try to get date from index or column
+                d = None
+                if 'date' in df.columns:
+                    d = r['date']
+                elif isinstance(idx, tuple) and len(idx) > 1:
+                    d = idx[1]  # Multi-index (symbol, date)
+                elif hasattr(idx, 'date'):
+                    d = idx
+                
+                if d is not None:
+                    if isinstance(d, str): 
+                        d = _dt.fromisoformat(d).date()
+                    elif hasattr(d, 'date'):
+                        d = d.date() if callable(d.date) else d
+                    
+                    if d:
+                        rows.append({
+                            "date": d, 
+                            "open": float(r.get('open',0) or r.get('Open',0) or 0), 
+                            "high": float(r.get('high',0) or r.get('High',0) or 0),
+                            "low": float(r.get('low',0) or r.get('Low',0) or 0), 
+                            "close": float(r.get('close',0) or r.get('Close',0) or 0),
+                            "volume": int(r.get('volume',0) or r.get('Volume',0) or 0)
+                        })
+            if rows:
+                rows.sort(key=lambda x:x["date"])
+                rows = rows[-days:]
+                return rows
+    except Exception as e:
+        log.warning(f"yahooquery failed for {sym}: {e}")
+    # Try yfinance
+    try:
+        t = yf.Ticker(sym)
+        hist = t.history(period='2y', interval='1d', auto_adjust=False)
+        if hist is not None and not hist.empty:
+            rows=[]
+            for idx, r in hist.iterrows():
+                d = idx.date()
+                rows.append({"date": d, "open": float(r.get('Open',0) or 0), "high": float(r.get('High',0) or 0),
+                             "low": float(r.get('Low',0) or 0), "close": float(r.get('Close',0) or 0),
+                             "volume": int(r.get('Volume',0) or 0)})
+            rows = rows[-days:]
+            return rows
+    except Exception as e:
+        log.warning(f"yfinance failed for {sym}: {e}")
+    # AlphaVantage (if key)
+    try:
+        import os, requests
+        av = os.getenv("ALPHA_VANTAGE_KEY") or os.getenv("ALPHAVANTAGE_KEY")
+        if av:
+            r = requests.get('https://www.alphavantage.co/query',
+                             params={'function':'TIME_SERIES_DAILY','symbol':sym,'apikey':av,'outputsize':'compact'},
+                             timeout=12)
+            ts = (r.json() or {}).get('Time Series (Daily)',{})
+            rows=[]
+            for ds, pd in ts.items():
+                d = _dt.strptime(ds, "%Y-%m-%d").date()
+                rows.append({"date": d, "open": float(pd['1. open']), "high": float(pd['2. high']),
+                             "low": float(pd['3. low']), "close": float(pd['4. close']),
+                             "volume": int(pd.get('5. volume',0) or 0)})
+            rows.sort(key=lambda x:x["date"])
+            rows = rows[-days:]
+            return rows
+    except Exception as e:
+        log.warning(f"AlphaVantage failed for {sym}: {e}")
+    # Finnhub (if key) — daily candles last ~2y
+    try:
+        import os, requests, time
+        fk = os.getenv("FINNHUB_KEY") or os.getenv("FINNHUB_API_KEY")
+        if fk:
+            end = int(time.time())
+            start = end - 60*60*24*730
+            r = requests.get('https://finnhub.io/api/v1/stock/candle',
+                             params={'symbol':sym,'resolution':'D','from':start,'to':end,'token':fk}, timeout=12)
+            j = r.json()
+            if j and j.get('s')=='ok':
+                rows=[]
+                for i, ts in enumerate(j['t']):
+                    d = _dt.fromtimestamp(ts).date()
+                    rows.append({"date": d, "open": float(j['o'][i]), "high": float(j['h'][i]),
+                                 "low": float(j['l'][i]), "close": float(j['c'][i]),
+                                 "volume": int(j['v'][i] or 0)})
+                rows = rows[-days:]
+                return rows
+    except Exception as e:
+        log.warning(f"Finnhub failed for {sym}: {e}")
+    raise RuntimeError(f"No provider returned data for {sym}")
+
+async def upsert_history_db(session, symbol: str, rows: List[Dict[str, Any]]) -> int:
+    """UPSERT recent rows for one symbol into price_daily."""
+    sym = symbol.upper()
+    tid = (await session.execute(text("SELECT id FROM ticker WHERE symbol=:s"), {"s": sym})).scalar()
+    if tid is None:
+        await session.execute(text("INSERT INTO ticker(symbol) VALUES (:s)"), {"s": sym})
+        tid = (await session.execute(text("SELECT id FROM ticker WHERE symbol=:s"), {"s": sym})).scalar()
+    inserted=0
+    for r in rows:
+        await session.execute(text("""
+            INSERT INTO price_daily(ticker_id,date,open,high,low,close,volume)
+            VALUES (:tid,:d,:o,:h,:l,:c,:v)
+            ON CONFLICT (ticker_id,date) DO UPDATE
+            SET open=EXCLUDED.open, high=EXCLUDED.high, low=EXCLUDED.low,
+                close=EXCLUDED.close, volume=EXCLUDED.volume
+        """), {"tid":tid, "d":r["date"], "o":r["open"], "h":r["high"], "l":r["low"], "c":r["close"], "v":r["volume"]})
+        inserted += 1
+    await session.commit()
+    return inserted

@@ -1,21 +1,62 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Star, Trash2, TrendingUp } from 'lucide-react';
+import { Plus, Star, Trash2, TrendingUp, TrendingDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useWatchlists, useCreateWatchlist, useDeleteWatchlist, useAddToWatchlist, useRemoveFromWatchlist } from '../hooks/useWatchlists';
 import TickerSearch from '../components/TickerSearch';
+import { getJSON } from '../lib/http';
 
 export default function Watchlists() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [selectedWatchlist, setSelectedWatchlist] = useState(null);
   const [showAddTicker, setShowAddTicker] = useState(false);
+  const [tickerPrices, setTickerPrices] = useState({}); // Store {symbol: {close, change, changePercent}}
 
   const { data: watchlists = [], isLoading } = useWatchlists();
   const createMutation = useCreateWatchlist();
   const deleteMutation = useDeleteWatchlist();
   const addTickerMutation = useAddToWatchlist();
   const removeTickerMutation = useRemoveFromWatchlist();
+
+  // Fetch prices for all tickers in watchlists
+  useEffect(() => {
+    if (!watchlists || watchlists.length === 0) return;
+
+    const allSymbols = new Set();
+    watchlists.forEach(watchlist => {
+      if (watchlist.tickers) {
+        watchlist.tickers.forEach(ticker => allSymbols.add(ticker.symbol));
+      }
+    });
+
+    // Fetch price for each symbol
+    const fetchPrices = async () => {
+      const prices = {};
+      for (const symbol of allSymbols) {
+        try {
+          const data = await getJSON(`/data/${symbol}?range_days=2`);
+          if (data && data.latest) {
+            const close = data.latest.close;
+            const prevClose = data.latest.prevClose;
+            const change = close - prevClose;
+            const changePercent = (change / prevClose) * 100;
+            prices[symbol] = {
+              close,
+              change,
+              changePercent,
+              isPositive: change >= 0
+            };
+          }
+        } catch (error) {
+          console.warn(`Failed to fetch price for ${symbol}:`, error);
+        }
+      }
+      setTickerPrices(prices);
+    };
+
+    fetchPrices();
+  }, [watchlists]);
 
   const handleCreate = async (e) => {
     e.preventDefault();
@@ -143,26 +184,61 @@ export default function Watchlists() {
 
               <div className="space-y-2 mb-4">
                 {watchlist.tickers && watchlist.tickers.length > 0 ? (
-                  watchlist.tickers.slice(0, 5).map((ticker) => (
-                    <div
-                      key={ticker.symbol}
-                      className="flex items-center justify-between p-2 bg-gray-50 rounded hover:bg-gray-100 transition-colors"
-                    >
-                      <Link
-                        to={`/ticker/${ticker.symbol}`}
-                        className="flex-1 flex items-center gap-2 hover:text-primary-600"
+                  watchlist.tickers.slice(0, 5).map((ticker) => {
+                    const priceData = tickerPrices[ticker.symbol];
+                    const isPositive = priceData?.isPositive ?? true;
+                    const bgColor = priceData ? (isPositive ? 'bg-green-50' : 'bg-red-50') : 'bg-gray-50';
+                    const textColor = priceData ? (isPositive ? 'text-green-700' : 'text-red-700') : 'text-gray-700';
+                    
+                    return (
+                      <div
+                        key={ticker.symbol}
+                        className={`flex items-center justify-between p-3 ${bgColor} rounded-lg hover:shadow-md transition-all border ${isPositive ? 'border-green-200' : 'border-red-200'}`}
                       >
-                        <TrendingUp className="w-4 h-4" />
-                        <span className="font-medium">{ticker.symbol}</span>
-                      </Link>
-                      <button
-                        onClick={() => handleRemoveTicker(watchlist.id, ticker.symbol)}
-                        className="text-red-500 hover:text-red-700 text-sm"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))
+                        <Link
+                          to={`/ticker/${ticker.symbol}`}
+                          className="flex items-center gap-3 flex-1 hover:text-primary-600"
+                        >
+                          {priceData ? (
+                            isPositive ? (
+                              <TrendingUp className="w-5 h-5 text-green-600" />
+                            ) : (
+                              <TrendingDown className="w-5 h-5 text-red-600" />
+                            )
+                          ) : (
+                            <TrendingUp className="w-5 h-5 text-gray-400" />
+                          )}
+                          <div className="flex-1">
+                            <div className="font-bold text-gray-900">{ticker.symbol}</div>
+                            {priceData && (
+                              <div className={`text-xs ${textColor} font-medium`}>
+                                {isPositive ? '+' : ''}{priceData.changePercent.toFixed(2)}% today
+                              </div>
+                            )}
+                          </div>
+                        </Link>
+                        
+                        {priceData && (
+                          <div className="text-right mr-3">
+                            <div className="font-bold text-gray-900">
+                              ${priceData.close.toFixed(2)}
+                            </div>
+                            <div className={`text-xs ${textColor} font-medium`}>
+                              {isPositive ? '+' : ''}{priceData.change.toFixed(2)}
+                            </div>
+                          </div>
+                        )}
+                        
+                        <button
+                          onClick={() => handleRemoveTicker(watchlist.id, ticker.symbol)}
+                          className="text-gray-400 hover:text-red-600 text-sm transition-colors"
+                          title="Remove from watchlist"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    );
+                  })
                 ) : (
                   <p className="text-sm text-gray-400 text-center py-4">No tickers yet</p>
                 )}

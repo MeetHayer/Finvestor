@@ -9,12 +9,20 @@ import { getJSON } from '../lib/http';
 import Fundamentals from '../components/Fundamentals';
 import { ChartSkeleton } from '../components/LoadingSkeleton';
 import TickerSearch from '../components/TickerSearch';
+import { SMA, EMA, RSI } from '../lib/indicators';
 
 export default function TickerDetail() {
   const { symbol } = useParams();
   const navigate = useNavigate();
   const [timeRange, setTimeRange] = useState(365);
   const [selectedTicker, setSelectedTicker] = useState(symbol || null);
+  const [chartType, setChartType] = useState('candles'); // 'candles' | 'line'
+  const [showSMA, setShowSMA] = useState(false);
+  const [showEMA, setShowEMA] = useState(false);
+  const [showRSI, setShowRSI] = useState(false);
+  const [smaPeriod, setSmaPeriod] = useState(20);
+  const [emaPeriod, setEmaPeriod] = useState(20);
+  const [rsiPeriod, setRsiPeriod] = useState(14);
 
   // Use React Query for data fetching with caching
   const { data, isLoading, error, refetch, isFetching } = useQuery({
@@ -34,9 +42,11 @@ export default function TickerDetail() {
   }, [selectedTicker, symbol, navigate]);
 
   const handleRefresh = async () => {
-    const promise = refetch();
+    // Call with refresh=1 to fetch fresh data from yahooquery
+    const promise = getJSON(`/data/${selectedTicker}?range_days=${timeRange}&refresh=1`)
+      .then(() => refetch());
     toast.promise(promise, {
-      loading: 'Refreshing data...',
+      loading: 'Refreshing data from live sources...',
       success: 'Data refreshed successfully!',
       error: 'Failed to refresh data',
     });
@@ -55,6 +65,11 @@ export default function TickerDetail() {
     // since the data might have future dates or different timezones
     return data.ohlc.slice(-timeRange);
   }, [data?.ohlc, timeRange]);
+
+  const closes = useMemo(() => (filteredPrices || []).map(p => Number(p?.[4] ?? 0)), [filteredPrices]);
+  const sma = useMemo(() => showSMA ? SMA(closes, smaPeriod) : null, [showSMA, closes, smaPeriod]);
+  const ema = useMemo(() => showEMA ? EMA(closes, emaPeriod) : null, [showEMA, closes, emaPeriod]);
+  const rsi = useMemo(() => showRSI ? RSI(closes, rsiPeriod) : null, [showRSI, closes, rsiPeriod]);
 
   // Guard against missing data AFTER hooks
   if (!selectedTicker) {
@@ -107,12 +122,59 @@ export default function TickerDetail() {
     // Keep data in chronological order (left to right: oldest to newest)
     const prices = filteredPrices.slice(); // No reverse - keep ASC order
     const dates = prices.map(p => new Date(p[0]).toISOString().split('T')[0]); // Convert timestamp to date string
-    const ohlc = prices.map(p => [p[1], p[4], p[3], p[2]]); // [open, close, low, high] - CORRECT ORDER
+    
+    // Backend format: [timestamp, open, high, low, close, volume]
+    // ECharts candlestick format: [open, close, lowest, highest]
+    const ohlc = prices.map(p => [p[1], p[4], p[3], p[2]]); // [open, close, low, high]
     const volumes = prices.map(p => p[5]);
+    
+    // Debug: Log a sample to verify format
+    if (prices.length > 0) {
+      console.log('Sample backend data:', prices[prices.length - 1]);
+      console.log('Mapped to candlestick:', ohlc[ohlc.length - 1]);
+    }
 
-    return {
+    const option = {
       animation: true,
       backgroundColor: '#ffffff',
+      // Add dataZoom for interactive zooming
+      dataZoom: [
+        {
+          type: 'inside', // Mouse wheel zoom
+          xAxisIndex: [0, 1],
+          start: 0,
+          end: 100,
+          zoomOnMouseWheel: true,
+          moveOnMouseMove: true,
+          moveOnMouseWheel: false
+        },
+        {
+          type: 'slider', // Slider bar at bottom
+          xAxisIndex: [0, 1],
+          start: 0,
+          end: 100,
+          top: '90%',
+          height: 20,
+          handleSize: '80%',
+          handleStyle: {
+            color: '#3b82f6',
+            borderColor: '#1d4ed8'
+          },
+          textStyle: {
+            color: '#666'
+          },
+          borderColor: '#ddd',
+          fillerColor: 'rgba(59, 130, 246, 0.2)',
+          dataBackground: {
+            lineStyle: {
+              color: '#3b82f6'
+            },
+            areaStyle: {
+              color: 'rgba(59, 130, 246, 0.1)'
+            }
+          }
+        }
+      ],
       tooltip: {
         trigger: 'axis',
         axisPointer: {
@@ -126,133 +188,140 @@ export default function TickerDetail() {
             type: 'dashed'
           }
         },
-        backgroundColor: 'rgba(0, 0, 0, 0.8)',
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
         borderColor: '#333',
+        borderWidth: 1,
         textStyle: {
           color: '#fff'
         },
         formatter: function (params) {
-          let result = `<div style="font-weight: bold; margin-bottom: 8px; color: #fff;">${params[0].axisValue}</div>`;
+          const dateIndex = params[0].dataIndex;
+          const backendData = prices[dateIndex]; // Get original backend data
+          
+          let result = `<div style="font-weight: bold; margin-bottom: 8px; color: #fff; border-bottom: 1px solid #555; padding-bottom: 4px;">${params[0].axisValue}</div>`;
+          
+          let volumeValue = null;
+          let rsiValue = null;
+          let smaValue = null;
+          let emaValue = null;
+          
           params.forEach(param => {
             if (param.seriesName === selectedTicker) {
-              const data = param.data;
-              const isGreen = data[1] >= data[0]; // Close >= Open
+              // Get values directly from backend data for accuracy
+              // Backend format: [timestamp, open, high, low, close, volume]
+              const open = backendData[1];
+              const high = backendData[2];
+              const low = backendData[3];
+              const close = backendData[4];
+              const isGreen = close >= open;
+              
               result += `
-                <div style="margin: 4px 0;">
-                  <span style="color: ${isGreen ? '#10b981' : '#ef4444'}; font-weight: bold;">●</span>
-                  <span style="margin-left: 8px; color: #fff;">Open: $${data[0].toFixed(2)}</span><br/>
-                  <span style="margin-left: 20px; color: #fff;">High: $${data[3].toFixed(2)}</span><br/>
-                  <span style="margin-left: 20px; color: #fff;">Low: $${data[2].toFixed(2)}</span><br/>
-                  <span style="margin-left: 20px; color: ${isGreen ? '#10b981' : '#ef4444'}; font-weight: bold;">Close: $${data[1].toFixed(2)}</span>
+                <div style="margin: 8px 0; line-height: 1.6;">
+                  <div style="margin: 2px 0;"><span style="color: #aaa;">Open:</span> <span style="color: #fff; font-weight: bold;">$${open.toFixed(2)}</span></div>
+                  <div style="margin: 2px 0;"><span style="color: #aaa;">High:</span> <span style="color: #10b981; font-weight: bold;">$${high.toFixed(2)}</span></div>
+                  <div style="margin: 2px 0;"><span style="color: #aaa;">Low:</span> <span style="color: #ef4444; font-weight: bold;">$${low.toFixed(2)}</span></div>
+                  <div style="margin: 2px 0;"><span style="color: #aaa;">Close:</span> <span style="color: ${isGreen ? '#10b981' : '#ef4444'}; font-weight: bold;">$${close.toFixed(2)}</span></div>
+                  <div style="margin: 4px 0; padding-top: 4px; border-top: 1px solid #555;"><span style="color: #aaa;">Change:</span> <span style="color: ${isGreen ? '#10b981' : '#ef4444'}; font-weight: bold;">${isGreen ? '+' : ''}$${(close - open).toFixed(2)} (${isGreen ? '+' : ''}${((close - open) / open * 100).toFixed(2)}%)</span></div>
                 </div>
               `;
             } else if (param.seriesName === 'Volume') {
-              result += `
-                <div style="margin: 4px 0;">
-                  <span style="color: ${param.color}; font-weight: bold;">●</span>
-                  <span style="margin-left: 8px; color: #fff;">Volume: ${param.data.toLocaleString()}</span>
-                </div>
-              `;
+              volumeValue = param.data;
+            } else if (param.seriesName && param.seriesName.startsWith('RSI')) {
+              rsiValue = param.data;
+            } else if (param.seriesName && param.seriesName.startsWith('SMA')) {
+              smaValue = param.data;
+            } else if (param.seriesName && param.seriesName.startsWith('EMA')) {
+              emaValue = param.data;
             }
           });
+          
+          // Add SMA/EMA indicators if present
+          if (smaValue !== null || emaValue !== null) {
+            result += `<div style="margin: 4px 0; padding-top: 4px; border-top: 1px solid #555;">`;
+            if (smaValue !== null && smaValue !== undefined && !isNaN(smaValue)) {
+              result += `<div style="margin: 2px 0;"><span style="color: #aaa;">SMA(${smaPeriod}):</span> <span style="color: #3b82f6; font-weight: bold;">$${smaValue.toFixed(2)}</span></div>`;
+            }
+            if (emaValue !== null && emaValue !== undefined && !isNaN(emaValue)) {
+              result += `<div style="margin: 2px 0;"><span style="color: #aaa;">EMA(${emaPeriod}):</span> <span style="color: #8b5cf6; font-weight: bold;">$${emaValue.toFixed(2)}</span></div>`;
+            }
+            result += `</div>`;
+          }
+          
+          // Add volume and RSI in a combined section at the bottom
+          if (volumeValue !== null || rsiValue !== null) {
+            result += `<div style="margin: 4px 0; padding-top: 4px; border-top: 1px solid #555;">`;
+            if (volumeValue !== null) {
+              result += `<div style="margin: 2px 0;"><span style="color: #aaa;">Volume:</span> <span style="color: #fff; font-weight: bold;">${volumeValue.toLocaleString()}</span></div>`;
+            }
+            if (rsiValue !== null) {
+              const rsiColor = rsiValue > 70 ? '#ef4444' : rsiValue < 30 ? '#10b981' : '#fff';
+              result += `<div style="margin: 2px 0;"><span style="color: #aaa;">RSI:</span> <span style="color: ${rsiColor}; font-weight: bold;">${rsiValue.toFixed(2)}</span></div>`;
+            }
+            result += `</div>`;
+          }
+          
           return result;
         }
       },
+      legend: { show: true },
       grid: [
-        { left: '5%', right: '5%', height: '60%' },
-        { left: '5%', right: '5%', top: '70%', height: '15%' }
+        { left: 40, right: 20, top: 20, height: '62%' },
+        { left: 40, right: 20, top: '70%', height: '24%' }
       ],
       xAxis: [
-        {
-          type: 'category',
-          data: dates,
-          scale: true,
-          boundaryGap: false,
-          axisLine: { onZero: false },
-          splitLine: { show: false },
-          min: 'dataMin',
-          max: 'dataMax'
-        },
-        {
-          type: 'category',
-          gridIndex: 1,
-          data: dates,
-          scale: true,
-          boundaryGap: false,
-          axisLine: { onZero: false },
-          axisTick: { show: false },
-          splitLine: { show: false },
-          axisLabel: { show: false },
-          min: 'dataMin',
-          max: 'dataMax'
-        }
+        { type: 'category', data: dates, boundaryGap: false, axisLabel: { hideOverlap: true } },
+        { type: 'category', data: dates, boundaryGap: false, gridIndex: 1, axisLabel: { hideOverlap: true } }
       ],
       yAxis: [
-        {
-          scale: true,
-          splitArea: { show: true }
-        },
-        {
-          scale: true,
-          gridIndex: 1,
-          splitNumber: 3,
-          axisLabel: { 
-            show: true,
-            formatter: function(value) {
-              if (value >= 1000000) {
-                return (value / 1000000).toFixed(1) + 'M';
-              } else if (value >= 1000) {
-                return (value / 1000).toFixed(1) + 'K';
-              }
-              return value.toString();
-            }
-          },
-          axisLine: { show: false },
-          axisTick: { show: false },
-          splitLine: { show: false }
-        }
+        { scale: true },
+        { scale: true, gridIndex: 1, name: 'Volume', nameGap: 28 },
+        { min: 0, max: 100, gridIndex: 1, position: 'right', name: 'RSI', nameGap: 28, splitNumber: 5 }
       ],
-      series: [
-        {
-          name: selectedTicker,
-          type: 'candlestick',
-          data: ohlc,
-          itemStyle: {
-            color: '#ef4444',
-            color0: '#10b981',
-            borderColor: '#ef4444',
-            borderColor0: '#10b981',
-            borderWidth: 1
-          },
-          emphasis: {
-            itemStyle: {
-              borderWidth: 2,
-              shadowBlur: 10,
-              shadowColor: 'rgba(0, 0, 0, 0.3)'
-            }
-          }
-        },
-        {
-          name: 'Volume',
-          type: 'bar',
-          xAxisIndex: 1,
-          yAxisIndex: 1,
-          data: volumes,
-          itemStyle: {
-            color: function(params) {
-              // Color volume bars based on price direction
-              const candleIndex = params.dataIndex;
-              if (candleIndex < ohlc.length) {
-                const candle = ohlc[candleIndex];
-                return candle[1] >= candle[0] ? '#10b981' : '#ef4444'; // Green if close >= open
-              }
-              return '#6b7280';
-            },
-            opacity: 0.7
-          }
-        }
-      ]
+      series: []
     };
+
+    const priceSeries = chartType === 'candles'
+      ? [{ name: selectedTicker, type: 'candlestick', data: ohlc, xAxisIndex: 0, yAxisIndex: 0, itemStyle: { color: '#10b981', color0: '#ef4444', borderColor: '#10b981', borderColor0: '#ef4444', borderWidth: 1 } }]
+      : [{ name: selectedTicker, type: 'line', data: closes, xAxisIndex: 0, yAxisIndex: 0, smooth: true, showSymbol: false, lineStyle: { width: 2 } }];
+
+    const overlaySeries = [];
+    if (showSMA && sma) overlaySeries.push({ name: `SMA(${smaPeriod})`, type: 'line', data: sma, xAxisIndex: 0, yAxisIndex: 0, smooth: true, showSymbol: false, lineStyle: { width: 1 } });
+    if (showEMA && ema) overlaySeries.push({ name: `EMA(${emaPeriod})`, type: 'line', data: ema, xAxisIndex: 0, yAxisIndex: 0, smooth: true, showSymbol: false, lineStyle: { width: 1 } });
+
+    option.series.push(...priceSeries, ...overlaySeries);
+    option.series.push({
+      name: 'Volume',
+      type: 'bar',
+      xAxisIndex: 1,
+      yAxisIndex: 1,
+      data: volumes,
+      itemStyle: {
+        color: function(params) {
+          const candleIndex = params.dataIndex;
+          if (candleIndex < ohlc.length) {
+            const candle = ohlc[candleIndex];
+            return candle[1] >= candle[0] ? '#10b981' : '#ef4444';
+          }
+          return '#6b7280';
+        },
+        opacity: 0.7
+      }
+    });
+
+    if (showRSI && rsi) {
+      option.series.push({
+        name: `RSI(${rsiPeriod})`,
+        type: 'line',
+        xAxisIndex: 1,
+        yAxisIndex: 2,
+        data: rsi,
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { width: 1 }
+      });
+    }
+
+    return option;
   };
 
   const timeRanges = [
@@ -336,6 +405,20 @@ export default function TickerDetail() {
               {range.label}
             </button>
           ))}
+        </div>
+      </div>
+
+      {/* Chart Controls */}
+      <div className="bg-white rounded-lg border p-4 shadow-sm">
+        <div className="flex gap-2 items-center my-2">
+          <button className={`px-3 py-1 rounded ${chartType==='candles' ? 'bg-black text-white' : 'bg-gray-100'}`} onClick={() => setChartType('candles')}>Candles</button>
+          <button className={`px-3 py-1 rounded ${chartType==='line' ? 'bg-black text-white' : 'bg-gray-100'}`} onClick={() => setChartType('line')}>Line</button>
+          <label className="ml-4 flex items-center gap-1 text-sm"><input type="checkbox" checked={showSMA} onChange={e => setShowSMA(e.target.checked)}/>SMA</label>
+          <input className="w-16 border rounded px-1 text-sm" type="number" min="2" value={smaPeriod} onChange={e => setSmaPeriod(Number(e.target.value||20))}/>
+          <label className="ml-2 flex items-center gap-1 text-sm"><input type="checkbox" checked={showEMA} onChange={e => setShowEMA(e.target.checked)}/>EMA</label>
+          <input className="w-16 border rounded px-1 text-sm" type="number" min="2" value={emaPeriod} onChange={e => setEmaPeriod(Number(e.target.value||20))}/>
+          <label className="ml-2 flex items-center gap-1 text-sm"><input type="checkbox" checked={showRSI} onChange={e => setShowRSI(e.target.checked)}/>RSI</label>
+          <input className="w-16 border rounded px-1 text-sm" type="number" min="2" value={rsiPeriod} onChange={e => setRsiPeriod(Number(e.target.value||14))}/>
         </div>
       </div>
 
