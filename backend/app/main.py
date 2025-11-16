@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.requests import Request
@@ -15,6 +16,9 @@ ALLOWED_ORIGINS = [
     "http://localhost:5174",
     "http://127.0.0.1:5174",
 ]
+# Add Vercel frontend URL from environment variable
+if os.getenv("FRONTEND_URL"):
+    ALLOWED_ORIGINS.append(os.getenv("FRONTEND_URL"))
 
 app.add_middleware(
     CORSMiddleware,
