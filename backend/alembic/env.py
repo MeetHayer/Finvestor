@@ -18,18 +18,31 @@ load_dotenv()
 config = context.config
 
 # Override sqlalchemy.url with DATABASE_URL from environment (Railway)
-database_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_DSN")
+# Priority: Railway/production env vars first, then local fallback
+candidate_keys = ["DATABASE_URL", "RAILWAY_DATABASE_URL", "DATABASE_PUBLIC_URL", "POSTGRES_DSN"]
+database_url = None
+for key in candidate_keys:
+    value = os.getenv(key)
+    if value and value.strip():
+        database_url = value.strip()
+        break
+
 if database_url:
+    # Normalize postgres:// -> postgresql://
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    
     # Convert to sync psycopg URL for Alembic
-    if database_url.startswith("postgresql://"):
-        # Already in correct format
-        config.set_main_option("sqlalchemy.url", database_url.replace("postgresql://", "postgresql+psycopg://", 1))
-    elif "postgresql+asyncpg" in database_url:
-        config.set_main_option("sqlalchemy.url", database_url.replace("postgresql+asyncpg", "postgresql+psycopg", 1))
+    if "postgresql+asyncpg" in database_url:
+        sync_url = database_url.replace("postgresql+asyncpg", "postgresql+psycopg")
     elif "postgresql+psycopg" in database_url:
-        config.set_main_option("sqlalchemy.url", database_url)
+        sync_url = database_url
+    elif database_url.startswith("postgresql://"):
+        sync_url = database_url.replace("postgresql://", "postgresql+psycopg://", 1)
     else:
-        config.set_main_option("sqlalchemy.url", database_url)
+        sync_url = database_url
+    
+    config.set_main_option("sqlalchemy.url", sync_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
