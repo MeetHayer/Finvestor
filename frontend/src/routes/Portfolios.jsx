@@ -8,6 +8,9 @@ import { usePortfolios, useCreatePortfolio, useDeletePortfolio, useAddHolding, u
 import { useTickerSearch } from '../lib/queries';
 import TickerSearch from '../components/TickerSearch';
 
+// API Base URL
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:8000';
+
 // Helper function to calculate portfolio value
 const calculatePortfolioValue = (holdings) => {
   if (!holdings || !Array.isArray(holdings)) return 0;
@@ -20,7 +23,7 @@ const calculatePortfolioValue = (holdings) => {
 // Helper function to get current price for a symbol
 const getCurrentPrice = async (symbol) => {
   try {
-    const response = await fetch(`/api/data/${symbol}?range_days=2`);
+    const response = await fetch(`${API_BASE}/api/data/${symbol}?range_days=2`);
     const data = await response.json();
     return data?.latest?.close || 0;
   } catch (error) {
@@ -32,7 +35,7 @@ const getCurrentPrice = async (symbol) => {
 // Helper function to get historical price for a symbol on a specific date
 const getHistoricalPrice = async (symbol, date) => {
   try {
-    const response = await fetch(`/api/data/${symbol}?range_days=365`);
+    const response = await fetch(`${API_BASE}/api/data/${symbol}?range_days=365`);
     const data = await response.json();
     if (data?.ohlc) {
       // Find the price data for the specific date
@@ -183,7 +186,7 @@ export default function Portfolios() {
 
   const handleSellHolding = async (portfolioId, symbol, fallbackQty) => {
     try {
-      const res = await fetch(`/api/portfolios/${portfolioId}/holdings`);
+      const res = await fetch(`${API_BASE}/api/portfolios/${portfolioId}/holdings`);
       const rows = await res.json();
       const row = Array.isArray(rows) ? rows.find(r => r.symbol === symbol) : null;
       const qty = Number(row?.qty ?? fallbackQty ?? 0);
@@ -211,7 +214,7 @@ export default function Portfolios() {
     }
 
     try {
-      const response = await fetch(`/api/portfolios/${sellData.portfolioId}/holdings/${sellData.symbol}/sell`, {
+      const response = await fetch(`${API_BASE}/api/portfolios/${sellData.portfolioId}/holdings/${sellData.symbol}/sell`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ qty })
@@ -239,7 +242,7 @@ export default function Portfolios() {
       portfolios.forEach(async (portfolio) => {
         try {
           // Fetch metrics from backend to ensure consistency
-          const response = await fetch(`/api/portfolios/${portfolio.id}/metrics`);
+          const response = await fetch(`${API_BASE}/api/portfolios/${portfolio.id}/metrics`);
           const metrics = await response.json();
           
           if (metrics) {
@@ -771,8 +774,8 @@ function PerformancePanel({ portfolioId }) {
     (async () => {
       try {
         const [vs, mx] = await Promise.all([
-          fetch(`/api/portfolios/${portfolioId}/value_series?days=365`).then(r => r.json()),
-          fetch(`/api/portfolios/${portfolioId}/metrics`).then(r => r.json()),
+          fetch(`${API_BASE}/api/portfolios/${portfolioId}/value_series?days=365`).then(r => r.json()),
+          fetch(`${API_BASE}/api/portfolios/${portfolioId}/metrics`).then(r => r.json()),
         ]);
         if (!alive) return;
         setSeries(vs?.series || []);
@@ -818,7 +821,7 @@ function PerformancePanel({ portfolioId }) {
           onClick={async () => {
             if (!showTx) {
               try {
-                const r = await fetch(`/api/portfolios/${portfolioId}/transactions`);
+                const r = await fetch(`${API_BASE}/api/portfolios/${portfolioId}/transactions`);
                 const data = await r.json();
                 setTx(Array.isArray(data) ? data : []);
               } catch {
