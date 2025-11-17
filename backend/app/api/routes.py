@@ -229,18 +229,10 @@ async def auto_seed_missing_prices(symbol: str, session: AsyncSession):
 # -------- Market data (USE BOTH SEEDED DATA + YAHOO APIs) --------
 @router.get("/data/{symbol}")
 async def data(symbol: str, range_days: int = 365, refresh: bool = False, session: AsyncSession = Depends(get_session)):
-    log.info(f"Fetching data for {symbol} - using BOTH seeded data + Yahoo APIs")
+    log.info(f"Fetching data for {symbol} - prioritizing database")
     try:
-        # ALWAYS fetch live data from Yahoo APIs in background (to update DB)
-        import asyncio
-        live_data_task = None
-        try:
-            from app.services.market_data import fetch_daily_history, upsert_history_db
-            # Fetch live data async (don't wait - we'll use it to update DB)
-            live_data_task = asyncio.create_task(fetch_daily_history(symbol, days=420))
-        except Exception as e:
-            log.warning(f"Failed to start live data fetch for {symbol}: {e}")
-
+        from datetime import datetime, timedelta
+        
         # Read from DB FIRST (seeded data - fast response)
         res = await session.execute(text("""
             SELECT pd.date, pd.open, pd.high, pd.low, pd.close, pd.volume
@@ -256,30 +248,53 @@ async def data(symbol: str, range_days: int = 365, refresh: bool = False, sessio
         """), {"sym": symbol.upper(), "limit": range_days})
 
         rows = res.fetchall()
-
-        # If we got live data, update DB with it (merge with seeded data)
-        if live_data_task:
+        
+        # Check if data is stale (older than 1 day) or refresh requested
+        needs_refresh = False
+        if rows and len(rows) > 0:
+            latest_date = rows[-1].date
+            if hasattr(latest_date, 'date'):
+                latest_date = latest_date.date()
+            today = datetime.now().date()
+            days_old = (today - latest_date).days
+            needs_refresh = days_old > 1 or refresh
+            log.info(f"{symbol}: Latest data from {latest_date} ({days_old} days old), refresh={needs_refresh}")
+        else:
+            needs_refresh = True
+            log.info(f"{symbol}: No data in DB, will fetch from APIs")
+        
+        # ONLY fetch live data if data is stale (> 1 day old) or explicitly requested
+        if needs_refresh:
+            import asyncio
             try:
-                rows_live = await live_data_task
-                if rows_live:
-                    await upsert_history_db(session, symbol, rows_live)
-                    log.info(f"✅ Updated DB with live Yahoo data for {symbol}")
-                    # Re-fetch to get merged data
-                    res = await session.execute(text("""
-                        SELECT pd.date, pd.open, pd.high, pd.low, pd.close, pd.volume
-                        FROM (
+                from app.services.market_data import fetch_daily_history, upsert_history_db
+                # Fetch live data async (don't wait - we'll use it to update DB)
+                live_data_task = asyncio.create_task(fetch_daily_history(symbol, days=420))
+                try:
+                    rows_live = await asyncio.wait_for(live_data_task, timeout=10.0)  # 10 sec timeout
+                    if rows_live:
+                        await upsert_history_db(session, symbol, rows_live)
+                        log.info(f"✅ Updated DB with live Yahoo data for {symbol}")
+                        # Re-fetch to get merged data
+                        res = await session.execute(text("""
                             SELECT pd.date, pd.open, pd.high, pd.low, pd.close, pd.volume
-                            FROM price_daily pd
-                            JOIN ticker t ON pd.ticker_id = t.id
-                            WHERE t.symbol = :sym 
-                            ORDER BY pd.date DESC 
-                            LIMIT :limit
-                        ) pd
-                        ORDER BY pd.date ASC
-                    """), {"sym": symbol.upper(), "limit": range_days})
-                    rows = res.fetchall()
+                            FROM (
+                                SELECT pd.date, pd.open, pd.high, pd.low, pd.close, pd.volume
+                                FROM price_daily pd
+                                JOIN ticker t ON pd.ticker_id = t.id
+                                WHERE t.symbol = :sym 
+                                ORDER BY pd.date DESC 
+                                LIMIT :limit
+                            ) pd
+                            ORDER BY pd.date ASC
+                        """), {"sym": symbol.upper(), "limit": range_days})
+                        rows = res.fetchall()
+                except asyncio.TimeoutError:
+                    log.warning(f"Live data fetch timed out for {symbol}, using cached data")
+                except Exception as e:
+                    log.warning(f"Live data update failed for {symbol}, using cached data: {e}")
             except Exception as e:
-                log.warning(f"Live data update failed for {symbol}, using seeded data only: {e}")
+                log.warning(f"Failed to start live data fetch for {symbol}: {e}")
 
         if not rows or len(rows) == 0:
             log.info(f"No price data in DB for {symbol}, attempting fetch from external APIs")
