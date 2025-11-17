@@ -12,7 +12,11 @@ load_dotenv()
 
 RAW_DSN = os.getenv("POSTGRES_DSN") or os.getenv("DATABASE_URL")
 if not RAW_DSN:
-    raise RuntimeError("POSTGRES_DSN/DATABASE_URL not set")
+    raise RuntimeError(
+        "DATABASE_URL not set! "
+        "In Railway: Add a PostgreSQL database service and link it to this service. "
+        "Railway will automatically provide DATABASE_URL environment variable."
+    )
 
 def _with_driver(dsn: str, driver: str) -> str:
     url = make_url(dsn)
