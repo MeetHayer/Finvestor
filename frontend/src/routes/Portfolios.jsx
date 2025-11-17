@@ -161,6 +161,9 @@ export default function Portfolios() {
         `Added ${result.qty} shares of ${result.symbol} for $${cost.toLocaleString()}. Remaining cash: $${remainingCash.toLocaleString()}`
       );
       
+      // Force refetch portfolios to update metrics
+      await refetch();
+      
       setShowAddHolding(false);
       setSelectedPortfolio(null);
       setSelectedTicker(''); // Reset selected ticker
