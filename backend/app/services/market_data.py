@@ -171,9 +171,16 @@ def _last_business_day(today: Optional[_date] = None) -> _date:
 async def fetch_daily_history(symbol: str, days: int = 420) -> List[Dict[str, Any]]:
     """
     Return list of dicts [{date, open, high, low, close, volume}] for ~last 400-420 days.
-    Try yahooquery -> yfinance -> (AlphaVantage if key) -> (Finnhub if key).
+    Try ALL available sources with comprehensive fallbacks:
+    1. yahooquery (fastest, most reliable)
+    2. yfinance (second best)
+    3. yahoo_fin (web scraping fallback)
+    4. AlphaVantage (if API key available)
+    5. Finnhub (if API key available)
+    6. Direct Yahoo Finance web scraping (last resort)
     """
     sym = symbol.upper()
+    
     # Try yahooquery
     try:
         import yahooquery as yq
@@ -210,9 +217,11 @@ async def fetch_daily_history(symbol: str, days: int = 420) -> List[Dict[str, An
             if rows:
                 rows.sort(key=lambda x:x["date"])
                 rows = rows[-days:]
+                log.info(f"✅ yahooquery succeeded for {sym} ({len(rows)} rows)")
                 return rows
     except Exception as e:
         log.warning(f"yahooquery failed for {sym}: {e}")
+    
     # Try yfinance
     try:
         t = yf.Ticker(sym)
@@ -225,30 +234,58 @@ async def fetch_daily_history(symbol: str, days: int = 420) -> List[Dict[str, An
                              "low": float(r.get('Low',0) or 0), "close": float(r.get('Close',0) or 0),
                              "volume": int(r.get('Volume',0) or 0)})
             rows = rows[-days:]
+            log.info(f"✅ yfinance succeeded for {sym} ({len(rows)} rows)")
             return rows
     except Exception as e:
         log.warning(f"yfinance failed for {sym}: {e}")
-    # AlphaVantage (if key)
+    
+    # Try yahoo_fin (web scraping)
+    try:
+        from yahoo_fin import stock_info as si
+        # Get historical data
+        df = si.get_data(sym, start_date=(_dt.now() - _td(days=730)).strftime('%Y-%m-%d'))
+        if df is not None and not df.empty:
+            rows=[]
+            for idx, r in df.iterrows():
+                d = idx.date() if hasattr(idx, 'date') else idx
+                rows.append({
+                    "date": d,
+                    "open": float(r.get('open',0) or 0),
+                    "high": float(r.get('high',0) or 0),
+                    "low": float(r.get('low',0) or 0),
+                    "close": float(r.get('close',0) or 0),
+                    "volume": int(r.get('volume',0) or 0)
+                })
+            rows = rows[-days:]
+            log.info(f"✅ yahoo_fin succeeded for {sym} ({len(rows)} rows)")
+            return rows
+    except Exception as e:
+        log.warning(f"yahoo_fin failed for {sym}: {e}")
+    
+    # Try AlphaVantage (if key)
     try:
         import os, requests
         av = os.getenv("ALPHA_VANTAGE_KEY") or os.getenv("ALPHAVANTAGE_KEY")
         if av:
             r = requests.get('https://www.alphavantage.co/query',
-                             params={'function':'TIME_SERIES_DAILY','symbol':sym,'apikey':av,'outputsize':'compact'},
+                             params={'function':'TIME_SERIES_DAILY','symbol':sym,'apikey':av,'outputsize':'full'},
                              timeout=12)
             ts = (r.json() or {}).get('Time Series (Daily)',{})
-            rows=[]
-            for ds, pd in ts.items():
-                d = _dt.strptime(ds, "%Y-%m-%d").date()
-                rows.append({"date": d, "open": float(pd['1. open']), "high": float(pd['2. high']),
-                             "low": float(pd['3. low']), "close": float(pd['4. close']),
-                             "volume": int(pd.get('5. volume',0) or 0)})
-            rows.sort(key=lambda x:x["date"])
-            rows = rows[-days:]
-            return rows
+            if ts:
+                rows=[]
+                for ds, pd in ts.items():
+                    d = _dt.strptime(ds, "%Y-%m-%d").date()
+                    rows.append({"date": d, "open": float(pd['1. open']), "high": float(pd['2. high']),
+                                 "low": float(pd['3. low']), "close": float(pd['4. close']),
+                                 "volume": int(pd.get('5. volume',0) or 0)})
+                rows.sort(key=lambda x:x["date"])
+                rows = rows[-days:]
+                log.info(f"✅ AlphaVantage succeeded for {sym} ({len(rows)} rows)")
+                return rows
     except Exception as e:
         log.warning(f"AlphaVantage failed for {sym}: {e}")
-    # Finnhub (if key) — daily candles last ~2y
+    
+    # Try Finnhub (if key) — daily candles last ~2y
     try:
         import os, requests, time
         fk = os.getenv("FINNHUB_KEY") or os.getenv("FINNHUB_API_KEY")
@@ -266,10 +303,55 @@ async def fetch_daily_history(symbol: str, days: int = 420) -> List[Dict[str, An
                                  "low": float(j['l'][i]), "close": float(j['c'][i]),
                                  "volume": int(j['v'][i] or 0)})
                 rows = rows[-days:]
+                log.info(f"✅ Finnhub succeeded for {sym} ({len(rows)} rows)")
                 return rows
     except Exception as e:
         log.warning(f"Finnhub failed for {sym}: {e}")
-    raise RuntimeError(f"No provider returned data for {sym}")
+    
+    # Last resort: Direct Yahoo Finance web scraping
+    try:
+        import requests
+        from bs4 import BeautifulSoup
+        import re
+        
+        # Try to get data from Yahoo Finance history page
+        end_ts = int(_dt.now().timestamp())
+        start_ts = int((_dt.now() - _td(days=730)).timestamp())
+        url = f"https://query1.finance.yahoo.com/v7/finance/download/{sym}?period1={start_ts}&period2={end_ts}&interval=1d&events=history"
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        }
+        
+        r = requests.get(url, headers=headers, timeout=12)
+        if r.status_code == 200:
+            import io
+            df = pd.read_csv(io.StringIO(r.text))
+            if df is not None and not df.empty:
+                rows=[]
+                for idx, row in df.iterrows():
+                    try:
+                        d = _dt.strptime(row['Date'], "%Y-%m-%d").date()
+                        rows.append({
+                            "date": d,
+                            "open": float(row.get('Open', 0) or 0),
+                            "high": float(row.get('High', 0) or 0),
+                            "low": float(row.get('Low', 0) or 0),
+                            "close": float(row.get('Close', 0) or 0),
+                            "volume": int(row.get('Volume', 0) or 0)
+                        })
+                    except:
+                        continue
+                if rows:
+                    rows = rows[-days:]
+                    log.info(f"✅ Direct Yahoo web scraping succeeded for {sym} ({len(rows)} rows)")
+                    return rows
+    except Exception as e:
+        log.warning(f"Direct Yahoo web scraping failed for {sym}: {e}")
+    
+    # All sources failed
+    log.error(f"❌ ALL {sym} data sources failed (yahooquery, yfinance, yahoo_fin, AlphaVantage, Finnhub, web scraping)")
+    raise RuntimeError(f"No provider returned data for {sym} after trying all fallbacks")
 
 async def upsert_history_db(session, symbol: str, rows: List[Dict[str, Any]]) -> int:
     """UPSERT recent rows for one symbol into price_daily."""
