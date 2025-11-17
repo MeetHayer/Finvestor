@@ -77,7 +77,8 @@ export default function Portfolios() {
   const [showAddHolding, setShowAddHolding] = useState(false);
   const [selectedTicker, setSelectedTicker] = useState('');
   const [showSellModal, setShowSellModal] = useState(false);
-  const [sellData, setSellData] = useState({ portfolioId: '', symbol: '', maxQty: 0 });
+  const [sellData, setSellData] = useState({ portfolioId: '', symbol: '', maxQty: 0, currentPrice: null });
+  const [sellQty, setSellQty] = useState(0);
   const [expanded, setExpanded] = useState(null); // portfolioId or null
 
   const { data: portfolios = [], isLoading, refetch } = usePortfolios();
@@ -190,15 +191,21 @@ export default function Portfolios() {
       const rows = await res.json();
       const row = Array.isArray(rows) ? rows.find(r => r.symbol === symbol) : null;
       const qty = Number(row?.qty ?? fallbackQty ?? 0);
-      setSellData({ portfolioId, symbol, maxQty: qty });
+      
+      // Fetch current price
+      let currentPrice = null;
       try {
-        const price = await getCurrentPrice(symbol);
-        const el = document.getElementById('sell-price-preview');
-        if (el) el.textContent = `$${Number(price).toFixed(2)}`;
-      } catch {}
+        currentPrice = await getCurrentPrice(symbol);
+      } catch (e) {
+        console.warn(`Failed to fetch price for ${symbol}:`, e);
+      }
+      
+      setSellData({ portfolioId, symbol, maxQty: qty, currentPrice });
+      setSellQty(0);
       setShowSellModal(true);
     } catch {
-      setSellData({ portfolioId, symbol, maxQty: fallbackQty || 0 });
+      setSellData({ portfolioId, symbol, maxQty: fallbackQty || 0, currentPrice: null });
+      setSellQty(0);
       setShowSellModal(true);
     }
   };
@@ -712,6 +719,8 @@ export default function Portfolios() {
                   min="0.01"
                   max={sellData.maxQty}
                   step="0.01"
+                  value={sellQty || ''}
+                  onChange={(e) => setSellQty(parseFloat(e.target.value) || 0)}
                   className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-red-500 focus:border-red-500 outline-none transition-all"
                   placeholder={`Max: ${sellData.maxQty} shares`}
                 />
@@ -725,15 +734,23 @@ export default function Portfolios() {
                 <div className="text-sm">
                   <div className="flex justify-between">
                     <span>Shares to sell:</span>
-                    <span id="sell-qty-preview">0</span>
+                    <span>{sellQty || 0}</span>
                   </div>
                   <div className="flex justify-between">
                     <span>Current price:</span>
-                    <span id="sell-price-preview">Loading...</span>
+                    <span>
+                      {sellData.currentPrice !== null 
+                        ? `$${sellData.currentPrice.toFixed(2)}`
+                        : 'Loading...'}
+                    </span>
                   </div>
                   <div className="flex justify-between font-semibold text-green-600 border-t pt-2 mt-2">
                     <span>Estimated proceeds:</span>
-                    <span id="sell-proceeds-preview">$0.00</span>
+                    <span>
+                      ${sellData.currentPrice !== null && sellQty
+                        ? (sellData.currentPrice * sellQty).toFixed(2)
+                        : '0.00'}
+                    </span>
                   </div>
                 </div>
               </div>
