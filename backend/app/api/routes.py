@@ -226,18 +226,22 @@ async def auto_seed_missing_prices(symbol: str, session: AsyncSession):
         return False
 
 
-# -------- Market data (USE YOUR REAL DATABASE ONLY) --------
+# -------- Market data (USE BOTH SEEDED DATA + YAHOO APIs) --------
 @router.get("/data/{symbol}")
 async def data(symbol: str, range_days: int = 365, refresh: bool = False, session: AsyncSession = Depends(get_session)):
-    log.info(f"Fetching data for {symbol} from YOUR REAL DATABASE")
+    log.info(f"Fetching data for {symbol} - using BOTH seeded data + Yahoo APIs")
     try:
-        # If refresh requested, fetch ~last 400d for just this symbol and upsert
-        if refresh:
+        # ALWAYS fetch live data from Yahoo APIs in background (to update DB)
+        import asyncio
+        live_data_task = None
+        try:
             from app.services.market_data import fetch_daily_history, upsert_history_db
-            rows_live = await fetch_daily_history(symbol, days=420)
-            await upsert_history_db(session, symbol, rows_live)
+            # Fetch live data async (don't wait - we'll use it to update DB)
+            live_data_task = asyncio.create_task(fetch_daily_history(symbol, days=420))
+        except Exception as e:
+            log.warning(f"Failed to start live data fetch for {symbol}: {e}")
 
-        # Read from DB (latest N rows → ASC for chart)
+        # Read from DB FIRST (seeded data - fast response)
         res = await session.execute(text("""
             SELECT pd.date, pd.open, pd.high, pd.low, pd.close, pd.volume
             FROM (
@@ -252,6 +256,30 @@ async def data(symbol: str, range_days: int = 365, refresh: bool = False, sessio
         """), {"sym": symbol.upper(), "limit": range_days})
 
         rows = res.fetchall()
+
+        # If we got live data, update DB with it (merge with seeded data)
+        if live_data_task:
+            try:
+                rows_live = await live_data_task
+                if rows_live:
+                    await upsert_history_db(session, symbol, rows_live)
+                    log.info(f"✅ Updated DB with live Yahoo data for {symbol}")
+                    # Re-fetch to get merged data
+                    res = await session.execute(text("""
+                        SELECT pd.date, pd.open, pd.high, pd.low, pd.close, pd.volume
+                        FROM (
+                            SELECT pd.date, pd.open, pd.high, pd.low, pd.close, pd.volume
+                            FROM price_daily pd
+                            JOIN ticker t ON pd.ticker_id = t.id
+                            WHERE t.symbol = :sym 
+                            ORDER BY pd.date DESC 
+                            LIMIT :limit
+                        ) pd
+                        ORDER BY pd.date ASC
+                    """), {"sym": symbol.upper(), "limit": range_days})
+                    rows = res.fetchall()
+            except Exception as e:
+                log.warning(f"Live data update failed for {symbol}, using seeded data only: {e}")
 
         if not rows or len(rows) == 0:
             log.info(f"No price data in DB for {symbol}, attempting fetch from external APIs")
