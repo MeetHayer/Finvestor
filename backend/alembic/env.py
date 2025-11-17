@@ -17,6 +17,20 @@ load_dotenv()
 # access to the values within the .ini file in use.
 config = context.config
 
+# Override sqlalchemy.url with DATABASE_URL from environment (Railway)
+database_url = os.getenv("DATABASE_URL") or os.getenv("POSTGRES_DSN")
+if database_url:
+    # Convert to sync psycopg URL for Alembic
+    if database_url.startswith("postgresql://"):
+        # Already in correct format
+        config.set_main_option("sqlalchemy.url", database_url.replace("postgresql://", "postgresql+psycopg://", 1))
+    elif "postgresql+asyncpg" in database_url:
+        config.set_main_option("sqlalchemy.url", database_url.replace("postgresql+asyncpg", "postgresql+psycopg", 1))
+    elif "postgresql+psycopg" in database_url:
+        config.set_main_option("sqlalchemy.url", database_url)
+    else:
+        config.set_main_option("sqlalchemy.url", database_url)
+
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
 if config.config_file_name is not None:

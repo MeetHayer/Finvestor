@@ -22,12 +22,15 @@ COPY backend ./backend
 # Switch into backend folder so `app.*` imports work
 WORKDIR /app/backend
 
+# Make start script executable
+RUN chmod +x start.sh
+
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 # Expose port (Railway sets PORT env var)
 EXPOSE 8000
 
-# Start FastAPI via Uvicorn
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Run migrations then start server
+CMD ["./start.sh"]
 
