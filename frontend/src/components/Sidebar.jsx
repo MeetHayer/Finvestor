@@ -8,7 +8,6 @@ const navigation = [
   { name: 'Ticker', to: '/ticker', icon: TrendingUp },
   { name: 'Watchlist', to: '/watchlist', icon: Star },
   { name: 'Portfolio', to: '/portfolio', icon: Briefcase },
-  { name: 'Compare', to: '/compare', icon: BarChart3 },
   { name: 'Methods', to: '/methods', icon: BookOpen },
 ];
 

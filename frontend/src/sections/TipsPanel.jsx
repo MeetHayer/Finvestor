@@ -1,19 +1,31 @@
 import { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { PRO_TIPS } from '../data/proTips';
 
 export default function TipsPanel() {
   const [currentTip, setCurrentTip] = useState(0);
   const [showAll, setShowAll] = useState(false);
+  const [autoRotateKey, setAutoRotateKey] = useState(0); // Key to reset auto-rotation timer
 
   useEffect(() => {
     if (showAll) return; // Don't rotate when viewing all
     
     const interval = setInterval(() => {
       setCurrentTip((prev) => (prev + 1) % PRO_TIPS.length);
-    }, 5000); // Rotate every 5 seconds
+    }, 10000); // Rotate every 10 seconds
 
     return () => clearInterval(interval);
-  }, [showAll]);
+  }, [showAll, autoRotateKey]); // Reset when autoRotateKey changes
+
+  const goToPrevious = () => {
+    setCurrentTip((prev) => (prev - 1 + PRO_TIPS.length) % PRO_TIPS.length);
+    setAutoRotateKey(prev => prev + 1); // Reset auto-rotation timer
+  };
+
+  const goToNext = () => {
+    setCurrentTip((prev) => (prev + 1) % PRO_TIPS.length);
+    setAutoRotateKey(prev => prev + 1); // Reset auto-rotation timer
+  };
 
   if (showAll) {
     return (
@@ -62,8 +74,22 @@ export default function TipsPanel() {
           ))}
         </div>
       </div>
-      <div className="flex items-center justify-center gap-2 mt-2">
-        <span className="text-xs text-gray-500">{currentTip + 1} / {PRO_TIPS.length}</span>
+      <div className="flex items-center justify-center gap-3 mt-2">
+        <button
+          onClick={goToPrevious}
+          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900"
+          aria-label="Previous tip"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <span className="text-xs text-gray-500 min-w-[4rem] text-center">{currentTip + 1} / {PRO_TIPS.length}</span>
+        <button
+          onClick={goToNext}
+          className="p-1.5 rounded-lg hover:bg-gray-100 transition-colors text-gray-600 hover:text-gray-900"
+          aria-label="Next tip"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
       </div>
     </div>
   );

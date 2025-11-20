@@ -13,6 +13,200 @@ import logging
 
 log = logging.getLogger(__name__)
 
+
+async def fetch_intraday_data(symbol: str, period_days: int = 7) -> Optional[Dict[str, Any]]:
+    """
+    Fetch 1-minute intraday OHLCV candles for the last N days.
+    Tries multiple sources with fallbacks:
+    1. yahooquery (best coverage)
+    2. Yahoo Chart API direct
+    3. Alpha Vantage (if API key available)
+    
+    Returns:
+    {
+        "symbol": "AAPL",
+        "interval": "1m",
+        "period_days": 7,
+        "last_updated": "2025-11-19T15:30:05Z",
+        "candles": [
+            ["2025-11-12T14:30:00Z", open, high, low, close, volume],
+            ...
+        ],
+        "source": "yahooquery"
+    }
+    """
+    symbol_upper = symbol.upper()
+    
+    # Try 1: yahooquery (best coverage for intraday)
+    try:
+        import yahooquery as yq
+        log.info(f"Trying yahooquery for {symbol_upper} intraday data...")
+        ticker = yq.Ticker(symbol_upper)
+        hist = ticker.history(period=f'{min(period_days, 7)}d', interval='1m')
+        
+        if hist is not None and not hist.empty:
+            candles = []
+            if hasattr(hist, 'reset_index'):
+                hist = hist.reset_index()
+            
+            for idx, row in hist.iterrows():
+                try:
+                    # Get date from index or column
+                    date_val = None
+                    if 'date' in hist.columns:
+                        date_val = row['date']
+                    elif isinstance(idx, tuple) and len(idx) > 1:
+                        date_val = idx[1]  # Multi-index (symbol, date)
+                    elif hasattr(idx, 'isoformat'):
+                        date_val = idx
+                    
+                    if date_val is not None:
+                        if isinstance(date_val, str):
+                            timestamp_iso = date_val
+                        elif hasattr(date_val, 'isoformat'):
+                            timestamp_iso = date_val.isoformat()
+                        else:
+                            timestamp_iso = pd.Timestamp(date_val).isoformat()
+                        
+                        candles.append([
+                            timestamp_iso,
+                            float(row.get('open', 0) or row.get('Open', 0) or 0),
+                            float(row.get('high', 0) or row.get('High', 0) or 0),
+                            float(row.get('low', 0) or row.get('Low', 0) or 0),
+                            float(row.get('close', 0) or row.get('Close', 0) or 0),
+                            int(row.get('volume', 0) or row.get('Volume', 0) or 0)
+                        ])
+                except Exception as e:
+                    log.debug(f"Failed to parse yahooquery candle: {e}")
+                    continue
+            
+            if candles:
+                log.info(f"✅ yahooquery succeeded for {symbol_upper} ({len(candles)} candles)")
+                return {
+                    "symbol": symbol_upper,
+                    "interval": "1m",
+                    "period_days": period_days,
+                    "last_updated": datetime.utcnow().isoformat() + "Z",
+                    "candles": candles,
+                    "source": "yahooquery",
+                    "note": "Free data sources may return less than requested period"
+                }
+    except Exception as e:
+        log.warning(f"yahooquery failed for {symbol_upper}: {e}")
+    
+    # Try 2: Yahoo Chart API (direct HTTP request)
+    try:
+        import time
+        import requests
+        log.info(f"Trying Yahoo Chart API for {symbol_upper} intraday data...")
+        
+        end_ts = int(time.time())
+        start_ts = end_ts - (min(period_days, 7) * 24 * 60 * 60)
+        
+        url = f'https://query1.finance.yahoo.com/v8/finance/chart/{symbol_upper}'
+        params = {
+            'period1': start_ts,
+            'period2': end_ts,
+            'interval': '1m',
+            'includePrePost': 'false'
+        }
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36'
+        }
+        
+        r = requests.get(url, params=params, headers=headers, timeout=15)
+        if r.status_code == 200:
+            data = r.json()
+            if 'chart' in data and data['chart']['result']:
+                result = data['chart']['result'][0]
+                timestamps = result.get('timestamp', [])
+                quotes = result['indicators']['quote'][0]
+                
+                if timestamps and quotes:
+                    candles = []
+                    for i in range(len(timestamps)):
+                        try:
+                            ts = datetime.fromtimestamp(timestamps[i]).isoformat()
+                            candles.append([
+                                ts,
+                                float(quotes['open'][i] or 0),
+                                float(quotes['high'][i] or 0),
+                                float(quotes['low'][i] or 0),
+                                float(quotes['close'][i] or 0),
+                                int(quotes['volume'][i] or 0)
+                            ])
+                        except Exception:
+                            continue
+                    
+                    if candles:
+                        log.info(f"✅ Yahoo Chart API succeeded for {symbol_upper} ({len(candles)} candles)")
+                        return {
+                            "symbol": symbol_upper,
+                            "interval": "1m",
+                            "period_days": period_days,
+                            "last_updated": datetime.utcnow().isoformat() + "Z",
+                            "candles": candles,
+                            "source": "yahoo_chart_api",
+                            "note": "Free data sources may return less than requested period"
+                        }
+    except Exception as e:
+        log.warning(f"Yahoo Chart API failed for {symbol_upper}: {e}")
+    
+    # Try 3: Alpha Vantage (if API key available)
+    try:
+        import os
+        import requests
+        av_key = os.getenv('ALPHA_VANTAGE_KEY') or os.getenv('ALPHAVANTAGE_KEY')
+        
+        if av_key:
+            log.info(f"Trying Alpha Vantage for {symbol_upper} intraday data...")
+            url = 'https://www.alphavantage.co/query'
+            params = {
+                'function': 'TIME_SERIES_INTRADAY',
+                'symbol': symbol_upper,
+                'interval': '1min',
+                'apikey': av_key,
+                'outputsize': 'full'  # Try to get more data
+            }
+            r = requests.get(url, params=params, timeout=15)
+            data = r.json()
+            
+            if 'Time Series (1min)' in data:
+                ts_data = data['Time Series (1min)']
+                candles = []
+                for ts_str, values in list(ts_data.items())[:period_days * 390]:  # ~390 minutes per trading day
+                    try:
+                        candles.append([
+                            ts_str,
+                            float(values['1. open']),
+                            float(values['2. high']),
+                            float(values['3. low']),
+                            float(values['4. close']),
+                            int(values.get('5. volume', 0) or 0)
+                        ])
+                    except Exception:
+                        continue
+                
+                if candles:
+                    # Sort chronologically
+                    candles.sort(key=lambda x: x[0])
+                    log.info(f"✅ Alpha Vantage succeeded for {symbol_upper} ({len(candles)} candles)")
+                    return {
+                        "symbol": symbol_upper,
+                        "interval": "1m",
+                        "period_days": period_days,
+                        "last_updated": datetime.utcnow().isoformat() + "Z",
+                        "candles": candles,
+                        "source": "alpha_vantage",
+                        "note": "Alpha Vantage API (may have rate limits)"
+                    }
+    except Exception as e:
+        log.warning(f"Alpha Vantage failed for {symbol_upper}: {e}")
+    
+    # All sources failed
+    log.error(f"❌ All intraday data sources failed for {symbol_upper}")
+    return None
+
 async def fetch_real_data_yahoo_api(symbol: str) -> Optional[Dict[str, Any]]:
     """Fetch REAL data from Yahoo Finance API"""
     try:

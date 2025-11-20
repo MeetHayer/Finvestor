@@ -49,8 +49,17 @@ export const useAddHolding = () => {
   
   return useMutation({
     mutationFn: ({ portfolioId, data }) => addHolding(portfolioId, data).then(r => r.data),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      const { portfolioId } = variables;
+      // Invalidate portfolio list
       queryClient.invalidateQueries({ queryKey: ['portfolios'] });
+      // Invalidate individual portfolio data
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
+      // Invalidate portfolio value series and metrics (for graph and return calculations)
+      queryClient.invalidateQueries({ queryKey: ['portfolioValueSeries', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolioMetrics', portfolioId] });
+      // Invalidate portfolio risk metrics too
+      queryClient.invalidateQueries({ queryKey: ['portfolioRisk', portfolioId] });
     },
   });
 };
@@ -61,8 +70,17 @@ export const useRemoveHolding = () => {
   
   return useMutation({
     mutationFn: ({ portfolioId, symbol }) => removeHolding(portfolioId, symbol).then(r => r.data),
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      const { portfolioId } = variables;
+      // Invalidate portfolio list
       queryClient.invalidateQueries({ queryKey: ['portfolios'] });
+      // Invalidate individual portfolio data
+      queryClient.invalidateQueries({ queryKey: ['portfolio', portfolioId] });
+      // Invalidate portfolio value series and metrics (for graph and return calculations)
+      queryClient.invalidateQueries({ queryKey: ['portfolioValueSeries', portfolioId] });
+      queryClient.invalidateQueries({ queryKey: ['portfolioMetrics', portfolioId] });
+      // Invalidate portfolio risk metrics too
+      queryClient.invalidateQueries({ queryKey: ['portfolioRisk', portfolioId] });
     },
   });
 };

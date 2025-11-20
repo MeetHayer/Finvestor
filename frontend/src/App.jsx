@@ -4,7 +4,7 @@ import Home from './routes/Home';
 import TickerDetail from './routes/TickerDetail';
 import Watchlists from './routes/Watchlists';
 import Portfolios from './routes/Portfolios';
-import Compare from './routes/Compare';
+import Portfolio from './routes/Portfolio';
 import Methods from './routes/Methods';
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -20,7 +20,7 @@ export default function App() {
             <Route path="/ticker/:symbol" element={<TickerDetail />} />
             <Route path="/watchlist" element={<Watchlists />} />
             <Route path="/portfolio" element={<Portfolios />} />
-            <Route path="/compare" element={<Compare />} />
+            <Route path="/portfolio/:id" element={<Portfolio />} />
             <Route path="/methods" element={<Methods />} />
           </Routes>
         </ErrorBoundary>

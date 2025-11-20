@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import { motion } from 'framer-motion';
-import { Star, RefreshCw, TrendingUp, TrendingDown } from 'lucide-react';
+import { Star, RefreshCw, TrendingUp, TrendingDown, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useSafeQuery as useQuery } from '../lib/querySafe';
 import { getJSON } from '../lib/http';
@@ -10,6 +10,7 @@ import Fundamentals from '../components/Fundamentals';
 import { ChartSkeleton } from '../components/LoadingSkeleton';
 import TickerSearch from '../components/TickerSearch';
 import { SMA, EMA, RSI } from '../lib/indicators';
+import { useIntradayData } from '../hooks/useIntradayData';
 
 export default function TickerDetail() {
   const { symbol } = useParams();
@@ -23,6 +24,8 @@ export default function TickerDetail() {
   const [smaPeriod, setSmaPeriod] = useState(20);
   const [emaPeriod, setEmaPeriod] = useState(20);
   const [rsiPeriod, setRsiPeriod] = useState(14);
+  const [activeTab, setActiveTab] = useState('historical'); // 'historical' | 'intraday'
+  const [lastIntradayUpdate, setLastIntradayUpdate] = useState(null);
 
   // Use React Query for data fetching with caching
   const { data, isLoading, error, refetch, isFetching } = useQuery({
@@ -33,6 +36,32 @@ export default function TickerDetail() {
     enabled: Boolean(selectedTicker && selectedTicker.trim().length > 0),
     retry: 2,
   });
+
+  // Intraday data hook
+  const { 
+    data: intradayData, 
+    isLoading: intradayLoading, 
+    error: intradayError,
+    refetch: refetchIntraday 
+  } = useIntradayData(selectedTicker, 7);
+
+  // Auto-refresh intraday data every 60 seconds when on intraday tab
+  useEffect(() => {
+    if (activeTab !== 'intraday') return;
+    
+    const intervalId = setInterval(() => {
+      refetchIntraday().then(() => {
+        setLastIntradayUpdate(new Date());
+      });
+    }, 60000); // 60 seconds
+    
+    // Set initial update time
+    if (intradayData && !lastIntradayUpdate) {
+      setLastIntradayUpdate(new Date());
+    }
+    
+    return () => clearInterval(intervalId);
+  }, [activeTab, refetchIntraday, intradayData, lastIntradayUpdate]);
 
   // Update URL when ticker changes
   useEffect(() => {
@@ -324,6 +353,139 @@ export default function TickerDetail() {
     return option;
   };
 
+  const getIntradayChartOption = (intradayData) => {
+    if (!intradayData?.candles || intradayData.candles.length === 0) return {};
+
+    // intradayData.candles format: ["2025-11-19T14:30:00Z", open, high, low, close, volume]
+    const candles = intradayData.candles;
+    const times = candles.map(c => {
+      const date = new Date(c[0]);
+      return date.toLocaleString('en-US', { 
+        month: 'numeric', 
+        day: 'numeric', 
+        hour: '2-digit', 
+        minute: '2-digit' 
+      });
+    });
+    
+    // ECharts candlestick format: [open, close, low, high]
+    const ohlc = candles.map(c => [c[1], c[4], c[3], c[2]]);
+    const volumes = candles.map(c => c[5]);
+
+    return {
+      animation: true,
+      backgroundColor: '#ffffff',
+      dataZoom: [
+        {
+          type: 'inside',
+          xAxisIndex: [0, 1],
+          start: 85, // Show recent data by default
+          end: 100
+        },
+        {
+          type: 'slider',
+          xAxisIndex: [0, 1],
+          start: 85,
+          end: 100,
+          top: '90%',
+          height: 20
+        }
+      ],
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'cross' },
+        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+        textStyle: { color: '#fff' },
+        formatter: function (params) {
+          const dataIndex = params[0].dataIndex;
+          const candle = candles[dataIndex];
+          const [timestamp, open, high, low, close, volume] = candle;
+          const isGreen = close >= open;
+          
+          return `
+            <div style="font-weight: bold; margin-bottom: 8px; border-bottom: 1px solid #555; padding-bottom: 4px;">
+              ${new Date(timestamp).toLocaleString()}
+            </div>
+            <div style="margin: 8px 0; line-height: 1.6;">
+              <div style="margin: 2px 0;"><span style="color: #aaa;">Open:</span> <span style="color: #fff; font-weight: bold;">$${open.toFixed(2)}</span></div>
+              <div style="margin: 2px 0;"><span style="color: #aaa;">High:</span> <span style="color: #10b981; font-weight: bold;">$${high.toFixed(2)}</span></div>
+              <div style="margin: 2px 0;"><span style="color: #aaa;">Low:</span> <span style="color: #ef4444; font-weight: bold;">$${low.toFixed(2)}</span></div>
+              <div style="margin: 2px 0;"><span style="color: #aaa;">Close:</span> <span style="color: ${isGreen ? '#10b981' : '#ef4444'}; font-weight: bold;">$${close.toFixed(2)}</span></div>
+              <div style="margin: 4px 0; padding-top: 4px; border-top: 1px solid #555;">
+                <span style="color: #aaa;">Volume:</span> <span style="color: #fff; font-weight: bold;">${volume.toLocaleString()}</span>
+              </div>
+            </div>
+          `;
+        }
+      },
+      grid: [
+        { left: '10%', right: '10%', top: '5%', height: '60%' },
+        { left: '10%', right: '10%', top: '71%', height: '15%' }
+      ],
+      xAxis: [
+        {
+          type: 'category',
+          data: times,
+          boundaryGap: true,
+          axisLine: { lineStyle: { color: '#ccc' } },
+          splitLine: { show: false },
+          axisLabel: { rotate: 45, fontSize: 10 }
+        },
+        {
+          type: 'category',
+          gridIndex: 1,
+          data: times,
+          boundaryGap: true,
+          axisLine: { lineStyle: { color: '#ccc' } },
+          axisLabel: { show: false }
+        }
+      ],
+      yAxis: [
+        {
+          type: 'value',
+          scale: true,
+          splitLine: { lineStyle: { color: '#f0f0f0' } },
+          axisLabel: {
+            formatter: (value) => `$${value.toFixed(2)}`
+          }
+        },
+        {
+          type: 'value',
+          gridIndex: 1,
+          scale: true,
+          splitLine: { show: false },
+          axisLabel: { show: false }
+        }
+      ],
+      series: [
+        {
+          name: selectedTicker,
+          type: 'candlestick',
+          data: ohlc,
+          itemStyle: {
+            color: '#10b981',
+            color0: '#ef4444',
+            borderColor: '#059669',
+            borderColor0: '#dc2626'
+          }
+        },
+        {
+          name: 'Volume',
+          type: 'bar',
+          xAxisIndex: 1,
+          yAxisIndex: 1,
+          data: volumes,
+          itemStyle: {
+            color: function(params) {
+              const candle = candles[params.dataIndex];
+              return candle[4] >= candle[1] ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.3)';
+            }
+          }
+        }
+      ]
+    };
+  };
+
   const timeRanges = [
     { label: '1M', days: 30 },
     { label: '3M', days: 90 },
@@ -339,11 +501,19 @@ export default function TickerDetail() {
   const change = latestPrice ? latestPrice[4] - (prevPrice?.[4] || latestPrice[4]) : 0; // p[4] is close
   const changePercent = latestPrice && prevPrice ? (change / prevPrice[4]) * 100 : 0; // prevPrice[4] is close
 
+  // Extract company name from fundamentals
+  const companyName = data?.fundamentals?.longName || data?.fundamentals?.shortName || '';
+
   return (
     <div className="p-6 space-y-6">
       {/* Header with Search */}
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">{selectedTicker} Analysis</h1>
+        <div>
+          <h1 className="text-2xl font-semibold">{selectedTicker}</h1>
+          {companyName && (
+            <p className="text-sm text-gray-600 mt-1">{companyName}</p>
+          )}
+        </div>
         <button
           onClick={handleRefresh}
           disabled={isFetching}
@@ -422,27 +592,108 @@ export default function TickerDetail() {
         </div>
       </div>
 
-      {/* Chart */}
+      {/* Chart with Tabs */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
-        className="bg-white rounded-lg border p-4 shadow-sm"
+        className="bg-white rounded-lg border shadow-sm"
       >
-        <h2 className="text-lg font-semibold mb-4">Price Chart</h2>
-        {isLoading ? (
-          <ChartSkeleton />
-        ) : filteredPrices && filteredPrices.length > 0 ? (
-          <ReactECharts
-            option={getChartOption()}
-            style={{ height: '500px', width: '100%' }}
-            opts={{ renderer: 'canvas' }}
-          />
-        ) : (
-          <div className="text-center py-12 text-gray-500">
-            No chart data available
+        {/* Tab Header */}
+        <div className="border-b px-4 py-3 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setActiveTab('historical')}
+              className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                activeTab === 'historical'
+                  ? 'bg-primary-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              Historical
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab('intraday');
+                if (!lastIntradayUpdate) {
+                  setLastIntradayUpdate(new Date());
+                }
+              }}
+              className={`px-4 py-2 rounded-lg font-medium transition-all flex items-center gap-2 ${
+                activeTab === 'intraday'
+                  ? 'bg-primary-600 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              <Clock className="w-4 h-4" />
+              Intraday (1m)
+            </button>
           </div>
-        )}
+          
+          {activeTab === 'intraday' && lastIntradayUpdate && (
+            <div className="text-xs text-gray-500">
+              Updated at {lastIntradayUpdate.toLocaleTimeString()}
+            </div>
+          )}
+        </div>
+
+        {/* Chart Content */}
+        <div className="p-4">
+          {activeTab === 'historical' ? (
+            // Historical Chart
+            <>
+              <h2 className="text-lg font-semibold mb-4">Price Chart</h2>
+              {isLoading ? (
+                <ChartSkeleton />
+              ) : filteredPrices && filteredPrices.length > 0 ? (
+                <ReactECharts
+                  option={getChartOption()}
+                  style={{ height: '500px', width: '100%' }}
+                  opts={{ renderer: 'canvas' }}
+                />
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  No chart data available
+                </div>
+              )}
+            </>
+          ) : (
+            // Intraday Chart
+            <>
+              <h2 className="text-lg font-semibold mb-2">Intraday Chart (1-minute bars)</h2>
+              <p className="text-sm text-gray-500 mb-4">
+                Last 7 days of 1-minute candles. Auto-refreshes every 60 seconds.
+              </p>
+              {intradayLoading ? (
+                <ChartSkeleton />
+              ) : intradayError ? (
+                <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+                  <p className="text-yellow-800 font-medium mb-1">Intraday data unavailable</p>
+                  <p className="text-sm text-yellow-700">
+                    {intradayError.message || 'Provider may be unavailable or symbol invalid'}
+                  </p>
+                </div>
+              ) : intradayData?.candles && intradayData.candles.length > 0 ? (
+                <>
+                  <ReactECharts
+                    option={getIntradayChartOption(intradayData)}
+                    style={{ height: '500px', width: '100%' }}
+                    opts={{ renderer: 'canvas' }}
+                  />
+                  {intradayData.note && (
+                    <p className="text-xs text-gray-500 mt-2 italic">
+                      Note: {intradayData.note}
+                    </p>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-12 text-gray-500">
+                  No intraday data available
+                </div>
+              )}
+            </>
+          )}
+        </div>
       </motion.div>
 
       {/* Fundamentals */}

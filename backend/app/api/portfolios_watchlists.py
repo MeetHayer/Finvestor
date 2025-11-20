@@ -14,23 +14,45 @@ from app.db import get_session, SessionLocal
 router = APIRouter(prefix="/api", tags=["portfolio_watchlist"])
 log = logging.getLogger(__name__)
 async def _close_for_date_db(session: AsyncSession, symbol: str, d):
+    """
+    Get close price from DB for a specific date.
+    Only accepts prices within 1 day of the target date to avoid using stale data.
+    """
+    from datetime import timedelta
+    
     sym = symbol.upper()
+    max_lookback = timedelta(days=1)
+    
+    # Try exact date
     row = (await session.execute(text("""
-        SELECT pd.close FROM price_daily pd JOIN ticker t ON t.id=pd.ticker_id
+        SELECT pd.close, pd.date FROM price_daily pd JOIN ticker t ON t.id=pd.ticker_id
         WHERE t.symbol=:sym AND pd.date=:d LIMIT 1
     """), {"sym": sym, "d": d})).first()
-    if row: return float(row[0])
+    if row: 
+        return float(row[0])
+    
+    # Try prior date (within 30 days)
     row = (await session.execute(text("""
-        SELECT pd.close FROM price_daily pd JOIN ticker t ON t.id=pd.ticker_id
-        WHERE t.symbol=:sym AND pd.date<:d ORDER BY pd.date DESC LIMIT 1
-    """), {"sym": sym, "d": d})).first()
-    if row: return float(row[0])
+        SELECT pd.close, pd.date FROM price_daily pd JOIN ticker t ON t.id=pd.ticker_id
+        WHERE t.symbol=:sym AND pd.date<:d AND pd.date >= :min_date
+        ORDER BY pd.date DESC LIMIT 1
+    """), {"sym": sym, "d": d, "min_date": d - max_lookback})).first()
+    if row:
+        log.info(f"Using DB price for {sym} from {row[1]} (target: {d})")
+        return float(row[0])
+    
+    # Try next date (within 1 day)
     row = (await session.execute(text("""
-        SELECT pd.close FROM price_daily pd JOIN ticker t ON t.id=pd.ticker_id
-        WHERE t.symbol=:sym AND pd.date>:d ORDER BY pd.date ASC LIMIT 1
-    """), {"sym": sym, "d": d})).first()
-    if row: return float(row[0])
-    raise HTTPException(status_code=404, detail=f"No price near {d} for {sym}")
+        SELECT pd.close, pd.date FROM price_daily pd JOIN ticker t ON t.id=pd.ticker_id
+        WHERE t.symbol=:sym AND pd.date>:d AND pd.date <= :max_date
+        ORDER BY pd.date ASC LIMIT 1
+    """), {"sym": sym, "d": d, "max_date": d + max_lookback})).first()
+    if row:
+        log.info(f"Using DB price for {sym} from {row[1]} (target: {d})")
+        return float(row[0])
+    
+    # No recent price in DB
+    raise HTTPException(status_code=404, detail=f"No recent price (within 1 day) in DB for {sym} on {d}")
 
 
 # --- Helpers to adapt to schema differences without breaking other features ---
@@ -521,11 +543,15 @@ async def upsert_holding(portfolio_id: str, h: HoldingUpsert, session: AsyncSess
         if provide_cost:
             actual_cost = float(h.avg_cost)
         else:
-            # Try DB first, then yahooquery if missing
+            # ALWAYS try DB first - it has our seeded historical data which is correct
+            actual_cost = None
             try:
                 actual_cost = await _close_for_date_db(session, h.symbol.upper(), trade_date)
-            except Exception:
-                # Use yahooquery to fetch historical price for this date
+                log.info(f"✅ Got price from DB for {h.symbol.upper()} on {trade_date}: ${actual_cost:.2f}")
+            except Exception as e:
+                log.info(f"⚠️  No DB price for {h.symbol.upper()} on {trade_date}, trying external APIs: {e}")
+                # Only use external APIs if DB has no data
+                # Try yahooquery as fallback
                 try:
                     import yahooquery as yq
                     ticker = yq.Ticker(h.symbol.upper())
@@ -540,15 +566,17 @@ async def upsert_holding(portfolio_id: str, h: HoldingUpsert, session: AsyncSess
                                 row_date = row_date.date()
                             if row_date == trade_date:
                                 actual_cost = float(r.get('close', 0) or 0)
+                                log.info(f"✅ Got price from yahooquery for {h.symbol.upper()} on {trade_date}: ${actual_cost:.2f}")
                                 break
                         if actual_cost is None and len(hist) > 0:
                             # Use last available price
                             actual_cost = float(hist.iloc[-1].get('close', 0) or 0)
-                except Exception as e:
-                    log.warning(f"yahooquery failed for {h.symbol.upper()}: {e}")
+                            log.info(f"✅ Got closest price from yahooquery for {h.symbol.upper()}: ${actual_cost:.2f}")
+                except Exception as api_err:
+                    log.warning(f"yahooquery failed for {h.symbol.upper()}: {api_err}")
                     actual_cost = None
             
-            if actual_cost is None:
+            if actual_cost is None or actual_cost <= 0:
                 raise HTTPException(
                     status_code=422,
                     detail=f"No price available to auto-fill average_cost for {h.symbol.upper()} on {trade_date}. "
@@ -1056,6 +1084,36 @@ async def portfolio_metrics(portfolio_id: str, session: AsyncSession = Depends(g
         return await calculate_portfolio_metrics(session, portfolio_id)
     except Exception as e:
         log.exception("metrics error")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/portfolios/{portfolio_id}/risk")
+async def portfolio_risk_metrics(portfolio_id: str, session: AsyncSession = Depends(get_session)):
+    """
+    Get portfolio risk metrics:
+    - Annualized volatility
+    - Sharpe ratio (using risk-free rate)
+    - Max drawdown
+    - 1-day 95% VaR (historical method)
+    """
+    try:
+        from app.services.portfolio_metrics import calculate_portfolio_risk_metrics
+        from datetime import date
+        
+        metrics = await calculate_portfolio_risk_metrics(session, portfolio_id)
+        
+        if metrics is None:
+            raise HTTPException(status_code=404, detail="Portfolio not found")
+        
+        return {
+            "portfolio_id": portfolio_id,
+            "as_of": date.today().isoformat(),
+            "metrics": metrics
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception("risk metrics error")
         raise HTTPException(status_code=500, detail=str(e))
 
 

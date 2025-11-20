@@ -23,9 +23,9 @@ class FundamentalsService:
     
     async def get_fundamentals(self, symbol: str) -> Dict[str, Any]:
         """
-        Fetch fundamentals for a symbol using Finnhub (preferred) and Alpha Vantage APIs.
+        Fetch fundamentals for a symbol using yahooquery (preferred), Finnhub, and Alpha Vantage APIs.
         Uses 5-minute cache if data already available.
-        Returns a dictionary with P/E ratio, Market Cap, and Beta.
+        Returns a dictionary with P/E ratio, Market Cap, Beta, and company name.
         """
         symbol = symbol.upper()
         
@@ -39,8 +39,9 @@ class FundamentalsService:
         
         log.info(f"🔄 Fetching fresh fundamentals for {symbol}")
         
-        # Try APIs in order of preference (Finnhub first for real-time data)
+        # Try APIs in order of preference (yahooquery first for free name + fundamentals)
         apis = [
+            ("yahooquery", self._fetch_yahooquery),
             ("finnhub", self._fetch_finnhub),
             ("alpha_vantage", self._fetch_alpha_vantage),
             ("calculated", self._fetch_calculated),
@@ -54,6 +55,11 @@ class FundamentalsService:
                     # Cache the result
                     self.cache[cache_key] = (result, datetime.now())
                     log.info(f"✅ Successfully fetched fundamentals for {symbol} using {api_name}")
+                    
+                    # Store company name in database if available
+                    if result.get('longName') or result.get('shortName'):
+                        await self._store_company_name(symbol, result)
+                    
                     return result
             except Exception as e:
                 log.warning(f"{api_name} failed for {symbol}: {e}")
@@ -62,6 +68,77 @@ class FundamentalsService:
         # If all APIs fail, return empty fundamentals
         log.warning(f"⚠️ All fundamentals APIs failed for {symbol}")
         return self._empty_fundamentals()
+    
+    async def _fetch_yahooquery(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """Fetch fundamentals using yahooquery (free, no API key needed)."""
+        try:
+            import yahooquery as yq
+            import asyncio
+            
+            log.info(f"Fetching yahooquery data for {symbol}")
+            
+            # Run in thread to avoid blocking
+            loop = asyncio.get_event_loop()
+            
+            def _fetch_sync():
+                ticker = yq.Ticker(symbol)
+                
+                # Get company name from price module
+                price_data = ticker.price
+                name = None
+                if isinstance(price_data, dict) and symbol in price_data:
+                    name = price_data[symbol].get('longName') or price_data[symbol].get('shortName')
+                
+                # Get fundamentals from summary_detail
+                summary = ticker.summary_detail
+                key_stats = ticker.key_stats
+                
+                result = {
+                    'price': price_data.get(symbol, {}),
+                    'summary': summary.get(symbol, {}) if isinstance(summary, dict) else {},
+                    'stats': key_stats.get(symbol, {}) if isinstance(key_stats, dict) else {},
+                    'name': name
+                }
+                
+                return result
+            
+            data = await loop.run_in_executor(None, _fetch_sync)
+            
+            if not data.get('name'):
+                log.warning(f"yahooquery returned no company name for {symbol}")
+                # Still try to get fundamentals even without name
+            
+            price = data.get('price', {})
+            summary = data.get('summary', {})
+            stats = data.get('stats', {})
+            
+            # Extract fundamentals
+            pe_ratio = summary.get('trailingPE') or price.get('trailingPE')
+            market_cap = price.get('marketCap')
+            beta = summary.get('beta')
+            dividend_yield = summary.get('dividendYield')
+            week_52_high = summary.get('fiftyTwoWeekHigh')
+            week_52_low = summary.get('fiftyTwoWeekLow')
+            
+            fundamentals = {
+                "trailingPE": float(pe_ratio) if pe_ratio else None,
+                "marketCap": int(float(market_cap)) if market_cap else None,
+                "fiftyTwoWeekHigh": float(week_52_high) if week_52_high else None,
+                "fiftyTwoWeekLow": float(week_52_low) if week_52_low else None,
+                "beta": float(beta) if beta else None,
+                "dividendYield": float(dividend_yield) if dividend_yield else None,
+                "avgVolume": None,
+                "longName": data.get('name'),
+                "shortName": data.get('name'),  # yahooquery doesn't distinguish, use same
+                "source": "yahooquery"
+            }
+            
+            log.info(f"yahooquery fundamentals for {symbol}: Name={data.get('name')}, PE={pe_ratio}, MC={market_cap}")
+            return fundamentals
+            
+        except Exception as e:
+            log.error(f"yahooquery error for {symbol}: {e}")
+            return None
     
     async def _fetch_finnhub(self, symbol: str) -> Optional[Dict[str, Any]]:
         """Fetch fundamentals using Finnhub API (with requests for reliability)."""
@@ -210,6 +287,7 @@ class FundamentalsService:
                 "beta": beta,
                 "dividendYield": dividend_yield,
                 "avgVolume": None,
+                "longName": data.get('Name'),  # Alpha Vantage returns 'Name' field
                 "source": "alpha_vantage"
             }
             
@@ -332,8 +410,49 @@ class FundamentalsService:
             "beta": None,
             "dividendYield": None,
             "avgVolume": None,
+            "longName": None,
+            "shortName": None,
             "source": "none"
         }
+    
+    async def _store_company_name(self, symbol: str, fundamentals: Dict[str, Any]):
+        """Store company name in the ticker table if not already present."""
+        try:
+            from app.db import SessionLocal
+            from sqlalchemy import text
+            
+            name = fundamentals.get('longName') or fundamentals.get('shortName')
+            if not name:
+                return
+            
+            async with SessionLocal() as session:
+                # Check if ticker exists and if name is missing
+                result = await session.execute(text("""
+                    SELECT id, name FROM ticker WHERE symbol = :symbol
+                """), {"symbol": symbol})
+                
+                row = result.first()
+                
+                if row and (not row.name or row.name.strip() == ''):
+                    # Update the name
+                    await session.execute(text("""
+                        UPDATE ticker SET name = :name WHERE symbol = :symbol
+                    """), {"name": name, "symbol": symbol})
+                    await session.commit()
+                    log.info(f"✅ Stored company name '{name}' for {symbol} in database")
+                elif not row:
+                    # Create the ticker with name
+                    await session.execute(text("""
+                        INSERT INTO ticker (symbol, name) VALUES (:symbol, :name)
+                        ON CONFLICT (symbol) DO UPDATE SET name = EXCLUDED.name
+                    """), {"symbol": symbol, "name": name})
+                    await session.commit()
+                    log.info(f"✅ Created ticker {symbol} with name '{name}' in database")
+                else:
+                    log.debug(f"Ticker {symbol} already has name: {row.name}")
+                    
+        except Exception as e:
+            log.warning(f"Failed to store company name for {symbol}: {e}")
 
 # Global instance
 fundamentals_service = FundamentalsService()

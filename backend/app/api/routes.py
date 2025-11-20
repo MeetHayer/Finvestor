@@ -415,6 +415,45 @@ async def data(symbol: str, range_days: int = 365, refresh: bool = False, sessio
         log.exception(f"/data error {symbol}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+@router.get("/tickers/{symbol}/intraday")
+async def get_intraday(
+    symbol: str,
+    period_days: int = Query(default=7, ge=1, le=7),
+    interval: str = Query(default="1m")
+):
+    """
+    Get 1-minute intraday OHLCV candles for the last N days (max 7).
+    
+    Note: Free data sources (Yahoo Finance) typically limit intraday data to 5-7 days.
+    Returns whatever data is available, which may be less than requested.
+    """
+    if interval != "1m":
+        raise HTTPException(
+            status_code=400, 
+            detail="Only 1-minute interval ('1m') is currently supported"
+        )
+    
+    try:
+        from app.services.market_data import fetch_intraday_data
+        
+        result = await fetch_intraday_data(symbol.upper(), period_days)
+        
+        if result is None:
+            raise HTTPException(
+                status_code=502,
+                detail=f"Failed to fetch intraday data for {symbol}. Provider may be unavailable or symbol invalid."
+            )
+        
+        return result
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.exception(f"Intraday data error for {symbol}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 class _ImportPath(BaseModel):
     path: str
 

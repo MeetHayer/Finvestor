@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'react-router-dom';
 import ReactECharts from 'echarts-for-react';
 import { motion } from 'framer-motion';
-import { Plus, Briefcase, Trash2, TrendingUp, TrendingDown, Calendar, DollarSign } from 'lucide-react';
+import { Plus, Briefcase, Trash2, TrendingUp, TrendingDown, Calendar, DollarSign, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePortfolios, useCreatePortfolio, useDeletePortfolio, useAddHolding, useRemoveHolding } from '../hooks/usePortfolios';
 import { useTickerSearch } from '../lib/queries';
@@ -223,6 +224,10 @@ export default function Portfolios() {
         toast.success(`Sold ${result.sold_shares} shares for $${result.proceeds.toLocaleString()}`);
         // Force invalidate and refetch portfolios to reflect updated cash/holdings
         await queryClient.invalidateQueries({ queryKey: ['portfolios'] });
+        // Invalidate portfolio value series and metrics (for graph and return calculations)
+        await queryClient.invalidateQueries({ queryKey: ['portfolioValueSeries', sellData.portfolioId] });
+        await queryClient.invalidateQueries({ queryKey: ['portfolioMetrics', sellData.portfolioId] });
+        await queryClient.invalidateQueries({ queryKey: ['portfolioRisk', sellData.portfolioId] });
         await refetch();
         setShowSellModal(false);
       } else {
@@ -760,6 +765,7 @@ export default function Portfolios() {
 
 
 function PerformancePanel({ portfolioId }) {
+  const navigate = useNavigate();
   const [series, setSeries] = useState([]);
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -812,6 +818,25 @@ function PerformancePanel({ portfolioId }) {
           <div><span className="text-gray-500">Gain/Loss:</span> <span className={`font-semibold ${(metrics.gain_loss ?? 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>${num(metrics.gain_loss, 2)}</span></div>
         </div>
       )}
+      
+      {/* View Full Details Button */}
+      <button
+        onClick={() => navigate(`/portfolio/${portfolioId}`)}
+        className="w-full mt-4 group relative overflow-hidden rounded-xl bg-gradient-to-r from-primary-600 via-blue-600 to-purple-600 p-[2px] transition-all duration-300 hover:shadow-lg hover:shadow-primary-500/50"
+      >
+        <div className="relative bg-white rounded-[10px] px-6 py-3 transition-all duration-300 group-hover:bg-transparent">
+          <div className="flex items-center justify-center gap-2">
+            <span className="font-semibold text-primary-600 transition-colors duration-300 group-hover:text-white">
+              View Full Portfolio Analysis
+            </span>
+            <ExternalLink className="w-4 h-4 text-primary-600 transition-all duration-300 group-hover:text-white group-hover:translate-x-1" />
+          </div>
+          <p className="text-xs text-gray-500 mt-1 transition-colors duration-300 group-hover:text-white/80">
+            Detailed performance chart, risk metrics (Sharpe, VaR, volatility) & holdings breakdown
+          </p>
+        </div>
+      </button>
+
       <div className="mt-3">
         <button
           className="btn-secondary"
