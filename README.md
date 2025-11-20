@@ -1,286 +1,285 @@
-# Finvestor - Your Personal Stock Portfolio Manager
+# Finvestor
 
-**CS 498 - Senior Seminar Project**  
-**Author**: Manmeet S Hayer  
-**Status**: Checkpoint #3 Complete ✅
+**A complete stock portfolio management platform built for CS 498 Senior Seminar**
 
----
-
-## 🎯 What is Finvestor?
-
-Finvestor is a web-based stock portfolio management platform that helps you track, analyze, and optimize your investments. Get real-time stock prices, view technical indicators, manage your watchlists, and monitor your portfolio performance - all in one place.
+Finvestor helps you track your investments, analyze stock performance, and understand how your portfolio stacks up against the market. Whether you're a beginner investor or managing a serious portfolio, Finvestor gives you the tools you need to make informed decisions.
 
 ---
 
-## ✨ What You Can Do
+## What Can You Do?
 
-### 📈 Track Stock Prices & Charts
-- **Real-time market data** for thousands of stocks
-- **Interactive candlestick charts** showing price movements over time
-- **Volume indicators** to see trading activity
-- **Historical data** with up to 5 years of price history
-- **Multiple timeframes** - view daily, weekly, or monthly trends
+### Track Any Stock
+Search for any publicly traded company and see its complete price history. View interactive charts showing how the stock has performed over days, months, or years. See current prices, daily changes, and trading volume at a glance.
 
-### 📊 View Technical Indicators
-- **Moving averages** to identify trends
-- **Support and resistance levels** to spot key price points
-- **Volume analysis** to gauge market interest
-- **Price change indicators** showing daily gains/losses
-- **52-week high/low** to understand stock ranges
+### Analyze with Technical Indicators
+Use professional tools like moving averages, RSI, and volume analysis to understand stock trends. Toggle indicators on and off to see what they reveal about price movements. Perfect for learning how technical analysis works.
 
-### 🎯 Monitor Market Benchmarks
-- **Live index tracking** - SPY (S&P 500), QQQ (Nasdaq), DIA (Dow Jones)
-- **Real-time price updates** throughout the trading day
-- **Daily change percentages** to see market direction
-- **Compare your portfolio** against major indexes
+### Manage Your Portfolio
+Add all your stock holdings with purchase dates and prices. Finvestor automatically calculates your portfolio's current value, tracks your gains and losses, and shows you a performance graph over time. See exactly how each investment is contributing to your overall returns.
 
-### 👀 Create Custom Watchlists
-- **Track your favorite stocks** in one place
-- **Quick access** to companies you're interested in
-- **Add and remove stocks** with a single click
-- **Search thousands of tickers** with autocomplete
-- **See real-time prices** for all your watched stocks
+### Compare Against the Market
+One of the most important questions: "Am I beating the market?" Finvestor lets you overlay your portfolio performance against major indices like the S&P 500 (SPY), Nasdaq (QQQ), and Dow Jones (DIA). See if your stock picks are outperforming or if you'd be better off with an index fund.
 
-### 💼 Manage Your Portfolio
-- **Track all your holdings** with purchase dates and quantities
-- **Automatic price updates** from historical data
-- **Portfolio value tracking** with real-time calculations
-- **See your gains and losses** at a glance
-- **Detailed breakdown** of each investment
-- **Performance metrics** showing how your portfolio is doing
+### Understand Risk
+Get detailed risk metrics for your portfolio:
+- **Sharpe Ratio**: Are your returns worth the risk you're taking?
+- **Volatility**: How much does your portfolio value swing?
+- **Max Drawdown**: What's the worst loss you've experienced?
+- **Value at Risk**: How much could you lose on a bad day?
 
-### 📱 Stock Fundamentals
-- **P/E Ratio** (Price-to-Earnings) - Is the stock overvalued?
-- **Market Cap** - How big is the company?
-- **Beta** - How volatile is the stock compared to the market?
-- **52-Week Range** - What's the stock's yearly high and low?
-- **Trading Volume** - How actively is it being traded?
+These metrics help you understand not just how much you're making, but how much risk you're taking to get there.
 
-### 🔍 Smart Search
-- **Instant search** across all available stocks
-- **Ticker symbol search** (e.g., AAPL, MSFT, TSLA)
-- **Company name search** (e.g., "Apple", "Microsoft")
-- **Fast autocomplete** as you type
-- **Recent searches** for quick access
+### Monitor Intraday Movements
+Watch stocks move minute-by-minute with 1-minute candlestick charts. See how prices react to news, earnings, or market events in real-time. Charts automatically refresh every 60 seconds so you always have the latest data.
+
+### Build Watchlists
+Keep track of stocks you're interested in but haven't bought yet. Create multiple watchlists for different strategies or sectors. See all your watched stocks' prices and changes in one place.
+
+### Learn as You Go
+The Methods page explains how all the technical indicators and risk metrics work. Understand what moving averages actually measure, why the Sharpe ratio matters, and how to interpret volatility. No finance degree required.
 
 ---
 
-## 🚀 Quick Start
+## Key Features
+
+**Stock Analysis**
+- Real-time and historical price data for thousands of stocks
+- Interactive candlestick and line charts
+- Company fundamentals (P/E ratio, market cap, beta)
+- 52-week high and low ranges
+- Trading volume analysis
+
+**Portfolio Management**
+- Track multiple portfolios
+- Add holdings with purchase dates and prices
+- Automatic cost basis calculation
+- Real-time portfolio valuation
+- Performance graphs showing value over time
+- Individual holding performance breakdown
+
+**Risk Analysis**
+- Annualized volatility calculation
+- Sharpe ratio using real risk-free rates from the Federal Reserve
+- Maximum drawdown analysis
+- Value at Risk (VaR) estimates
+- Detailed explanations of what each metric means
+
+**Technical Analysis**
+- Simple Moving Average (SMA)
+- Exponential Moving Average (EMA)
+- Relative Strength Index (RSI)
+- Customizable indicator periods
+- Visual overlays on price charts
+
+**Benchmark Comparison**
+- Compare portfolio returns against SPY, QQQ, and DIA
+- See how your investments performed relative to the market
+- Visual overlays on performance graphs
+- Same starting date comparison for fair evaluation
+
+**Intraday Trading**
+- 1-minute candlestick charts
+- Last 7 days of minute-by-minute data
+- Auto-refresh every 60 seconds
+- Perfect for day trading or monitoring real-time movements
+
+**Watchlists**
+- Create unlimited watchlists
+- Track stocks you're considering
+- Quick access to favorite companies
+- Real-time price updates
+
+---
+
+## Getting Started
 
 ### Prerequisites
-- Python 3.11+
-- PostgreSQL 15+
-- Node.js 18+
+- Python 3.11 or higher
+- PostgreSQL 14 or higher
+- Node.js 18 or higher
 
-### Start the Backend
+### Installation
+
+**1. Clone the repository**
 ```bash
-cd backend
-source .venv/bin/activate
-pip install -r requirements.txt  # First time only
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+git clone <repository-url>
+cd finvestor
 ```
 
-### Start the Frontend
+**2. Set up the backend**
+
+```bash
+cd backend
+python3 -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+Create a `.env` file in the `backend` directory:
+```env
+POSTGRES_DSN=postgresql+asyncpg://username:password@localhost:5432/dbname
+FRED_API_KEY=your_fred_api_key_here  # Optional but recommended for Sharpe ratio
+```
+
+Run database migrations:
+```bash
+alembic upgrade head
+```
+
+Seed risk-free rate data (for Sharpe ratio calculations):
+```bash
+python3 scripts/seed_risk_free_rate.py
+```
+
+Start the backend server:
+```bash
+uvicorn app.main:app --reload --port 8000
+```
+
+**3. Set up the frontend**
+
 ```bash
 cd frontend
-npm install  # First time only
+npm install
+```
+
+Create a `.env` file in the `frontend` directory:
+```env
+VITE_API_BASE=http://localhost:8000
+```
+
+Start the development server:
+```bash
 npm run dev
 ```
 
-### Open the App
-- **Finvestor App**: http://localhost:5173
-- **API Documentation**: http://localhost:8000/docs
+**4. Open the application**
+
+Navigate to http://localhost:5173 in your browser.
+
+The API documentation is available at http://localhost:8000/docs
 
 ---
 
-## 💡 How to Use Finvestor
+## How It Works
 
-### 1. Browse Market Benchmarks
-When you first open Finvestor, you'll see the major market indexes (SPY, QQQ, DIA) with live prices and daily changes. This gives you a quick snapshot of overall market direction.
+### Data Sources
+Finvestor pulls stock data from multiple reliable sources to ensure accuracy and availability:
+- **Yahoo Finance APIs** (yahooquery, yfinance) - Primary source for prices and company data
+- **Alpha Vantage** - Backup for historical prices and fundamentals
+- **Finnhub** - Company profiles and financial metrics
+- **FRED (Federal Reserve)** - Risk-free rates for Sharpe ratio calculations
 
-### 2. Search for Stocks
-Use the search bar to find any stock by ticker symbol (like "AAPL" for Apple) or company name. You'll get instant results with autocomplete suggestions.
+If one source is unavailable, the system automatically falls back to others.
 
-### 3. View Stock Details
-Click on any stock to see:
-- Interactive price charts with candlesticks
-- Trading volume over time
-- Key fundamentals (P/E ratio, market cap, etc.)
-- 52-week high/low ranges
-- Current price and daily change
+### Portfolio Tracking
+When you add a holding, Finvestor:
+1. Fetches the historical price for your purchase date
+2. Calculates your cost basis (price × quantity)
+3. Updates your cash balance
+4. Recalculates your portfolio value using current prices
+5. Updates your performance graph
 
-### 4. Build Your Watchlist
-Found stocks you're interested in? Add them to your watchlist with one click. Your watchlist gives you quick access to monitor all your favorite stocks in one place.
+All calculations happen in real-time as you add or remove holdings.
 
-### 5. Track Your Portfolio
-Add your actual stock holdings to track your investments:
-- Enter the ticker symbol
-- Add the quantity you own
-- Specify when you bought it
-- Finvestor automatically pulls the historical price
-- See your portfolio value update in real-time
+### Risk Metrics
+Risk metrics are calculated from your portfolio's daily value history:
+- **Volatility**: Standard deviation of daily returns, annualized
+- **Sharpe Ratio**: (Portfolio Return - Risk-Free Rate) / Volatility
+- **Max Drawdown**: Largest peak-to-trough decline percentage
+- **VaR**: 95th percentile of worst daily returns
 
-### 6. Analyze Performance
-Check your portfolio page to see:
-- Total portfolio value
-- Individual holding performance
-- Gains and losses
-- Asset allocation breakdown
-- How you're performing vs. market indexes
+The system uses real 3-month Treasury Bill rates from the Federal Reserve for accurate Sharpe ratio calculations.
 
 ---
 
-## 📊 Sample Stocks Available
-
-Finvestor comes pre-loaded with price data for popular stocks across major sectors:
-
-- **Tech**: Apple (AAPL), Microsoft (MSFT), Google (GOOGL), Tesla (TSLA)
-- **Finance**: JPMorgan (JPM), Bank of America (BAC), Goldman Sachs (GS)
-- **Retail**: Amazon (AMZN), Walmart (WMT), Target (TGT)
-- **Healthcare**: Johnson & Johnson (JNJ), Pfizer (PFE), UnitedHealth (UNH)
-- **Energy**: ExxonMobil (XOM), Chevron (CVX)
-- **And many more...**
-
----
-
-## 🎨 Beautiful, Responsive Design
-
-### Desktop Experience
-- **Full-width charts** for detailed analysis
-- **Side-by-side layouts** for easy comparison
-- **Smooth animations** for a polished feel
-- **Dark theme support** for comfortable viewing
-
-### Mobile Experience
-- **Responsive charts** that adapt to small screens
-- **Touch-friendly buttons** and controls
-- **Hamburger menu** for easy navigation
-- **Optimized layouts** for phones and tablets
-
----
-
-## 📱 Key Features at a Glance
-
-| Feature | Description |
-|---------|-------------|
-| 📈 **Real-Time Data** | Live stock prices and market updates |
-| 📊 **Interactive Charts** | Candlestick charts with volume indicators |
-| 🎯 **Watchlists** | Track your favorite stocks |
-| 💼 **Portfolio Tracking** | Monitor your actual investments |
-| 🔍 **Smart Search** | Find any stock instantly |
-| 📉 **Technical Indicators** | Moving averages, volume, trends |
-| 🏦 **Market Benchmarks** | SPY, QQQ, DIA tracking |
-| 📱 **Mobile Friendly** | Works on any device |
-| 🎨 **Modern UI** | Clean, professional design |
-| ⚡ **Fast Performance** | Optimized for speed |
-
----
-
-## 📈 Data Sources
-
-Finvestor pulls stock data from multiple reliable sources:
-- **Finnhub** - Real-time market data
-- **AlphaVantage** - Historical prices and fundamentals
-- **YahooQuery** - Company information and metrics
-- **yahoo_fin** - Live index data and current prices
-
-This multi-source approach ensures you always get accurate, up-to-date information.
-
----
-
-## 🛠️ Built With
-
-**Backend:**
-- FastAPI (Python) - High-performance API server
-- PostgreSQL - Reliable database for stock data
-- SQLAlchemy - Database operations
-
-**Frontend:**
-- React - Modern, responsive user interface
-- Tailwind CSS - Beautiful styling
-- ECharts - Professional financial charts
-- React Query - Smart data caching
-
----
-
-## 🎯 Checkpoint Progress
-
-### ✅ Checkpoint #1 - Database & API Foundation
-- Set up PostgreSQL database with stock data
-- Created API endpoints for data access
-- Seeded 25 stocks with 5 years of history
-- Established data relationships
-
-### ✅ Checkpoint #2 - User Interface & Core Features
-- Built React frontend with modern UI
-- Implemented watchlist management
-- Added portfolio tracking
-- Created interactive charts
-- Made it mobile responsive
-
-### ✅ Checkpoint #3 - Polish & Deployment Ready
-- Added live market benchmarks
-- Enhanced portfolio features
-- Improved data fetching reliability
-- Optimized performance
-- Updated documentation
-- Prepared for deployment
-
----
-
-## 📚 Project Structure
+## Project Structure
 
 ```
-Finvestor/
-├── backend/              # Python FastAPI server
+finvestor/
+├── backend/                 # FastAPI Python backend
 │   ├── app/
-│   │   ├── api/         # Stock data endpoints
-│   │   ├── services/    # Data fetching logic
-│   │   └── models.py    # Database models
-│   └── requirements.txt
-├── frontend/             # React web application
+│   │   ├── api/            # API endpoints
+│   │   ├── services/       # Business logic and data fetching
+│   │   └── models.py       # Database models
+│   ├── alembic/           # Database migrations
+│   ├── scripts/           # Utility scripts (seeding, etc.)
+│   └── requirements.txt   # Python dependencies
+│
+├── frontend/               # React frontend
 │   ├── src/
-│   │   ├── routes/      # Main pages (Portfolios, Watchlists, etc.)
-│   │   ├── components/  # Reusable UI components
-│   │   └── hooks/       # Data fetching and state management
-│   └── package.json
-└── docs/                 # Documentation
+│   │   ├── routes/        # Page components
+│   │   ├── components/    # Reusable UI components
+│   │   ├── hooks/         # React hooks for data fetching
+│   │   └── lib/           # Utilities and API client
+│   └── package.json       # Node dependencies
+│
+└── docs/                  # Documentation
 ```
 
 ---
 
-## 💼 About This Project
+## Development Journey
 
-Finvestor was built as a senior capstone project for CS 498. The goal was to create a practical, real-world application that combines:
-- **Full-stack development** (frontend + backend)
-- **Database design** and management
-- **API integration** with external data sources
-- **Modern web technologies** and best practices
-- **User experience** and interface design
+This project was built over four checkpoints, each adding significant functionality:
 
-This project demonstrates proficiency in building production-ready web applications that solve real problems for real users.
+**Checkpoint #1** - Built the foundation with PostgreSQL database, seeded initial stock data, and created the core API endpoints.
 
----
+**Checkpoint #2** - Developed the React frontend, implemented watchlist and portfolio management, and created interactive charts.
 
-## 📅 What's Next?
+**Checkpoint #3** - Added live market benchmarks, improved data reliability with multiple API sources, and polished the user experience.
 
-Future enhancements planned for Finvestor:
-- 🤖 **Portfolio Optimization** - AI-powered suggestions
-- 📊 **Advanced Analytics** - Detailed performance metrics
-- 🔔 **Price Alerts** - Get notified of significant moves
-- 📰 **News Feed** - Latest stock news and events
-- 🔄 **Auto-Rebalancing** - Maintain target allocations
-- 📈 **Backtesting** - Test strategies with historical data
+**Checkpoint #4** - Implemented advanced analytics including risk metrics (Sharpe ratio, VaR, volatility, max drawdown), 1-minute intraday charts, benchmark comparisons, and comprehensive educational content.
 
 ---
 
-## 🎓 Educational Purpose
+## Technology Stack
 
-This is a student project created for educational purposes. While it uses real stock data, it is not intended as financial advice. Always consult with qualified financial professionals before making investment decisions.
+**Backend**
+- FastAPI - Modern Python web framework
+- PostgreSQL - Relational database
+- SQLAlchemy - Database ORM
+- Alembic - Database migrations
+
+**Frontend**
+- React - UI framework
+- Vite - Build tool
+- Tailwind CSS - Styling
+- ECharts - Charting library
+- React Query - Data fetching and caching
+
+**Data Sources**
+- Yahoo Finance (multiple APIs)
+- Alpha Vantage
+- Finnhub
+- FRED (Federal Reserve Economic Data)
 
 ---
 
-**Built with ❤️ for smarter investing**
+## Documentation
 
-**Last Updated**: November 16, 2025  
-**Version**: 3.0 (Checkpoint #3 Complete)
+For detailed information, see the `docs/` directory:
+- **Setup Guide** - Complete installation instructions
+- **User Guide** - How to use all features
+- **API Keys** - How to obtain and configure API keys
+- **Changelog** - Detailed history of changes
+
+---
+
+## Important Notes
+
+This is an educational project created for CS 498 Senior Seminar. While it uses real stock data, it is not intended as financial advice. Always consult with qualified financial professionals before making investment decisions.
+
+The application is designed to help you learn about investing, understand portfolio management, and practice using real market data. Use it as a tool for education and practice, not as your sole source of investment guidance.
+
+---
+
+## License
+
+This project is created for educational purposes as part of CS 498 Senior Seminar.
+
+---
+
+**Built by Manmeet S Hayer**  
+**CS 498 - Senior Seminar**  
+**Checkpoint #4 Complete** ✅
